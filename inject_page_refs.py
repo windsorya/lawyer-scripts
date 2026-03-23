@@ -412,22 +412,30 @@ def process_folder(folder_path, defendant_name=None):
         print(f"\n   📋 已載入覆寫設定：{config_path}")
 
     configs = {}
+    auto_detections = {}  # 記錄每卷的自動偵測結果（用於偵測報告）
     for pdf_name in pdfs:
         pdf_path = os.path.join(folder_path, pdf_name)
         volume_name = simplify_name(pdf_name)
 
         print(f"\n   🔄 {volume_name}...", end=' ', flush=True)
 
+        # 一律先跑自動偵測
+        auto_start, auto_mode, total_pages = detect_config(pdf_path)
+        auto_detections[volume_name] = {
+            'start': auto_start,
+            'mode': auto_mode,
+            'total_pages': total_pages,
+        }
+
         # 檢查是否有手動覆寫
         if volume_name in overrides:
             ov = overrides[volume_name]
             detected_mode = ov['mode']
             detected_start = ov['start']
-            with pdfplumber.open(pdf_path) as pdf:
-                total_pages = len(pdf.pages)
             print(f"共 {total_pages} 頁 ⚙️ 手動覆寫")
         else:
-            detected_start, detected_mode, total_pages = detect_config(pdf_path)
+            detected_start = auto_start
+            detected_mode = auto_mode
 
         mode_label = "連續" if detected_mode == "consecutive" else "隔頁（正反面掃描）"
         skip = detected_start - 1
@@ -520,6 +528,62 @@ def process_folder(folder_path, defendant_name=None):
     print(f"\n💡 頁碼為法院蓋印頁碼，可直接引用於書狀。")
     print(f"   [前置頁:] = 封面/目錄  [背面:] = 掃描背面")
     print(f"   下一步：上傳 claude.ai 進行卷證分析。")
+
+    # ============================================================
+    # 步驟四：產出偵測報告
+    # ============================================================
+    from datetime import date
+
+    report_volumes = []
+    success_count = 0
+    total_count = len(pdfs)
+
+    for pdf_name in pdfs:
+        volume_name = simplify_name(pdf_name)
+        final_start, final_mode = configs[volume_name]
+        auto = auto_detections[volume_name]
+        auto_start = auto['start']
+        auto_mode = auto['mode']
+
+        match = (auto_start == final_start and auto_mode == final_mode)
+        if match:
+            success_count += 1
+
+        # 判斷修正方式
+        if match:
+            correction = None
+        elif volume_name in overrides:
+            correction = '_page_config.json 手動覆寫'
+        else:
+            correction = '未知'
+
+        report_volumes.append({
+            'volume': volume_name,
+            'total_pages': auto['total_pages'],
+            'auto_detection': {
+                'start': auto_start,
+                'mode': auto_mode,
+            },
+            'final_config': {
+                'start': final_start,
+                'mode': final_mode,
+            },
+            'detection_success': match,
+            'correction': correction,
+        })
+
+    report = {
+        'date': date.today().isoformat(),
+        'defendant': defendant_name or '',
+        'success_rate': f"{success_count}/{total_count}",
+        'volumes': report_volumes,
+    }
+
+    report_path = os.path.join(folder_path, '_detection_report.json')
+    with open(report_path, 'w', encoding='utf-8') as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+
+    print(f"\n📊 偵測報告：_detection_report.json（成功率 {success_count}/{total_count}）")
 
 
 if __name__ == '__main__':
