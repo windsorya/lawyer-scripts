@@ -28,3 +28,12 @@ commit message 格式：
 3. 如果全部偵測成功 → 不需改進，直接完成
 
 整個過程不問律師。
+
+---
+## 卷證筆錄摘取（Gemini 分批路線）
+- 大型掃描 PDF（>44MB）的筆錄摘取，優先用 gemini_batch_extract.py
+- 腳本位置：~/lawyer-scripts/gemini_batch_extract.py
+- 技術限制：Gemini File API generateContent 每次約 46MB 隱性上限（70頁/46MB OK，80頁/56MB 失敗）
+- 中文檔名處理：操作前先 cp 到 /tmp/英文名.ext 再處理
+- 產出格式：結構化 .md，含頁碼、日期、受詢問人、詢問機關
+---
