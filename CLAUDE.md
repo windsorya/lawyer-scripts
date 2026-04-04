@@ -30,10 +30,14 @@ commit message 格式：
 整個過程不問律師。
 
 ---
-## 卷證筆錄摘取（Gemini 分批路線）
-- 大型掃描 PDF（>44MB）的筆錄摘取，優先用 gemini_batch_extract.py
-- 腳本位置：~/lawyer-scripts/gemini_batch_extract.py
+## 卷證筆錄摘取（Gemini 分批路線，v6）
+- 大型掃描 PDF（>44MB）的筆錄摘取，優先用 gemini_pdf_extract.py
+- 腳本位置：~/JudicialData/gemini_pdf_extract.py（244行，正式版）
+- 舊版 gemini_batch_extract.py 在 ~/lawyer-scripts/（v1，已被 v6 取代）
 - 技術限制：Gemini File API generateContent 每次約 46MB 隱性上限（70頁/46MB OK，80頁/56MB 失敗）
+- 模型：gemini-2.5-flash（品質優於 pro，保留卷宗表頭，快一倍）
+- 參數：MAX_BATCH_MB=23, OVERLAP_PAGES=2, max_workers=8, timeout=90s
 - 中文檔名處理：操作前先 cp 到 /tmp/英文名.ext 再處理
-- 產出格式：結構化 .md，含頁碼、日期、受詢問人、詢問機關
+- 產出格式：Google Doc（claude.ai 可用 readGoogleDoc 直接讀取）
+- 呼叫方式：python3 ~/JudicialData/gemini_pdf_extract.py --pdf /path/to/file.pdf --prompt-type 筆錄摘取 --case-folder-id <Drive folder ID> --doc-name "描述名" --max-workers 4
 ---
