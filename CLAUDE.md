@@ -41,3 +41,11 @@ commit message 格式：
 - 產出格式：Google Doc（claude.ai 可用 readGoogleDoc 直接讀取）
 - 呼叫方式：python3 ~/JudicialData/gemini_pdf_extract.py --pdf /path/to/file.pdf --prompt-type 筆錄摘取 --case-folder-id <Drive folder ID> --doc-name "描述名" --max-workers 4
 ---
+
+## clasp (GAS 自動部署) — 2026-04-05 新增
+
+- clasp 3.3.0 已安裝，GAS 專案已 clone 到 ~/lawyer-scripts/gas/morning-briefing/
+- Script ID: 1MhSRWa4r5n2kGp6fTjSa7MGtkAenF7oBfatK4eRGSbzn8iodGNT0a4aX
+- 檔案：程式碼.js（主檔 v2.30）、court-hearing-notify.js（v1.8）、daily-task-dispatch.js（陳律 v1.4）、business-card-reminder.js（v1.0）
+- **修改流程**：clasp pull → 修改 → diff 確認 → clasp push → clasp pull 驗證 → git commit
+- **安全規則**：push 前必須 diff；push 失敗從 git 恢復；每次 push 後自動 git commit
