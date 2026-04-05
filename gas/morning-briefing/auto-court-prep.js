@@ -54,17 +54,34 @@ function runAutoCourtPrep() {
 }
 
 /**
- * 07:00 觸發：今天開庭提醒
+ * 07:00 觸發：今天開庭提醒 + 補救昨晚未產出的開庭準備
+ * 規格：推播今天開庭提醒 + 補救未產出的開庭準備
  */
 function runTodayCourtReminder() {
   var today = new Date();
   var events = getCourtPrepEvents_(today);
+
   if (events.length === 0) {
     Logger.log('[todayReminder] 今天沒有庭期');
     return;
   }
+
+  // 1. 推播今天開庭提醒
   sendTodayCourtReminderLine_(events, today);
   Logger.log('[todayReminder] 已推播今日庭期提醒（' + events.length + ' 筆）');
+
+  // 2. 補救：對 prep_done 未標記的庭期補產開庭準備
+  var rescued = 0;
+  for (var i = 0; i < events.length; i++) {
+    try {
+      Logger.log('[todayReminder] 補救生成開庭準備：' + events[i].getTitle());
+      if (processCourtPrepEvent_(events[i], today)) rescued++;
+    } catch (e) {
+      Logger.log('[todayReminder] 補救失敗：' + events[i].getTitle() + ' — ' + e);
+      notifyLinePrepError_(events[i].getTitle(), e.toString());
+    }
+  }
+  if (rescued > 0) Logger.log('[todayReminder] 補救完成：' + rescued + ' 筆');
 }
 
 // ======================== 觸發器管理 ========================
@@ -673,7 +690,12 @@ function generateCourtPrep_(caseType, caseInfo, notionContent) {
  * 依案件類型建構 Claude 開庭準備 Prompt
  * 通用六大模組 A-F 依類型調整重點
  */
+/**
+ * 依案件類型建構 Claude 開庭準備 Prompt
+ * 六大通用模組 A-F（全類型必出）+ 四套模板專屬區塊
+ */
 function buildCourtPrepPrompt_(caseType, caseInfo, notionContent) {
+  // ── 庭期資訊 ──
   var header = '## 庭期資訊\n'
     + '- 案件：' + (caseInfo.caseName || '（未知）') + '\n'
     + '- 案號：' + (caseInfo.caseNumber || '（未知）') + '\n'
@@ -682,74 +704,173 @@ function buildCourtPrepPrompt_(caseType, caseInfo, notionContent) {
     + '- 法官/承辦：' + (caseInfo.judge || caseInfo.division || '（未知）') + '\n'
     + '- 庭期類型：' + caseInfo.hearingType + '\n\n';
 
-  var notionSection = '';
-  if (notionContent && notionContent.trim()) {
-    notionSection = '## Notion 案件現況（以下為案件頁內容，請據此分析）\n'
-      + notionContent.substring(0, 3000) + '\n\n';
-  } else {
-    notionSection = '（Notion 案件頁無可讀內容，請依案號與案件類型提供通用準備要點）\n\n';
-  }
+  // ── Notion 案件現況 ──
+  var notionSection = notionContent && notionContent.trim()
+    ? '## Notion 案件現況（請依此內容分析各模組）\n' + notionContent.substring(0, 3500) + '\n\n'
+    : '（Notion 案件頁無可讀內容，請依案號與案件類型提供通用準備要點）\n\n';
 
-  var templates = {
-    刑偵: '請依以下六大模組為本件**刑事偵查**案件生成開庭準備文件：\n\n'
-      + '## A.【案件現況確認】\n'
-      + '偵查進度、目前已知事實、當事人立場摘要\n\n'
-      + '## B.【本次傳訊重點】\n'
-      + '推測本次傳訊目的、檢察官可能詢問方向\n\n'
-      + '## C.【當事人到庭準備】\n'
-      + '應攜帶文件、到庭注意事項（如偵查不公開規定）\n\n'
-      + '## D.【預期偵訊問題與建議回應】\n'
-      + '列出 3–5 個可能問題與建議應對方式（簡短具體）\n\n'
-      + '## E.【辯護策略重點】\n'
-      + '辯護切入點、需釐清疑點、可補充有利陳述\n\n'
-      + '## F.【後續待辦】\n'
-      + '庭後需完成事項、可能的聲請或書狀期限',
+  // ── 六大通用模組 A-F（依案件類型調整重點） ──
+  var moduleAF = buildModulesAF_(caseType);
 
-    刑審: '請依以下六大模組為本件**刑事審理**案件生成開庭準備文件：\n\n'
-      + '## A.【案件現況確認】\n'
-      + '審理進度、已解決事項、目前待解決爭點\n\n'
-      + '## B.【本次庭期目標】\n'
-      + '本次開庭要達成的目標、法官可能詢問方向\n\n'
-      + '## C.【辯護論點與策略】\n'
-      + '主要辯護論點、需強調重點、目前需補強之處\n\n'
-      + '## D.【量刑有利條件整理】\n'
-      + '自首、坦承、和解、賠償、初犯、品行等有利事實\n\n'
-      + '## E.【預期法官問題與回應方向】\n'
-      + '列出 3–5 個可能問題與建議回應方式\n\n'
-      + '## F.【後續待辦】\n'
-      + '庭後需完成事項、書狀期限、下次庭前準備方向',
+  // ── 四套模板專屬區塊 ──
+  var typeBlock = buildTypeSpecificBlock_(caseType);
 
-    民事: '請依以下六大模組為本件**民事**案件生成開庭準備文件：\n\n'
-      + '## A.【案件現況確認】\n'
-      + '訴訟進度、主要爭點、已確認與待確認事項\n\n'
-      + '## B.【本次庭期目標】\n'
-      + '本次庭期預期程序（準備程序/言詞辯論/調解）與目標\n\n'
-      + '## C.【攻防重點】\n'
-      + '己方論點補強、對方可能主張及反駁策略\n\n'
-      + '## D.【証據清單確認】\n'
-      + '本次應提出或確認的証據、書証，需補充者\n\n'
-      + '## E.【調解評估】\n'
-      + '（如有調解可能）調解空間、底線、可接受條件分析\n\n'
-      + '## F.【後續待辦】\n'
-      + '庭後待辦、答辯書狀期限、下次庭前準備',
+  return header + notionSection
+    + '請依下列格式生成開庭準備文件。每個模組都要輸出，資訊不足時標注「（資料不足，請補充）」而非跳過。\n\n'
+    + moduleAF + '\n' + typeBlock;
+}
 
-    行政: '請依以下六大模組為本件**行政訴訟**案件生成開庭準備文件：\n\n'
-      + '## A.【案件現況確認】\n'
-      + '訴訟進度、行政處分主要問題、已爭執事項\n\n'
-      + '## B.【本次庭期目標】\n'
-      + '本次庭期預期進行事項與目標\n\n'
-      + '## C.【主要法律論點】\n'
-      + '適用法規、違法性論點、比例原則、程序瑕疵等\n\n'
-      + '## D.【事實論點補充】\n'
-      + '重要事實確認、需補充的陳述或書証\n\n'
-      + '## E.【預期法官問題與回應方向】\n'
-      + '列出 3–5 個可能問題與建議回應方式\n\n'
-      + '## F.【後續待辦】\n'
-      + '庭後待辦、補充書狀期限'
+/**
+ * 六大通用模組 A-F，依案件類型調整各模組的具體重點
+ */
+function buildModulesAF_(caseType) {
+  // 模組 A：人物關係（依類型調整視角）
+  var moduleA_detail = {
+    刑偵: '嫌疑人↔共犯↔被害人，標注「今日是否同時到場」「供述一致性風險」',
+    刑審: '被告↔共同被告↔今日傳喚證人，標注「已認罪/否認」立場',
+    民事: '原告↔被告↔訴訟代理人，標注「友軍/敵軍/中立」及授權範圍',
+    行政: '原告↔處分機關↔參加人，標注「機關代理人層級」與決策權限'
+  }[caseType] || '當事人、對造、法院相關人員，標注立場';
+
+  // 模組 B：事實時間軸標注規則
+  var moduleB_detail = {
+    刑偵: '犯罪事實時間軸（🔴必提/🟡備用/⚪背景），標注「上次偵訊以來新增事項」',
+    刑審: '程序進度+書狀往返時間軸，法官交辦未完成事項加 ⚠️',
+    民事: '程序進度（起訴→答辯→準備程序→言詞辯論）+書狀往返，⚠️標注交辦未完成事項',
+    行政: '行政程序時間軸（處分→訴願→行政訴訟）+ 救濟程序雙軸，⚠️標注法官交辦未完成事項'
+  }[caseType] || '訴訟進度時間軸，標注重要節點';
+
+  // 模組 C：主張 vs 證據比對角度
+  var moduleC_detail = {
+    刑偵: '被告說法 vs 客觀證據（偵查中已取得者）',
+    刑審: '檢辯雙方主張對照表，✅/⚠️/❓/❌ 各爭點證據狀態',
+    民事: '原告 vs 被告 vs 已提出證據三欄比對，❓標注尚待舉證事項',
+    行政: '機關認定事實 vs 當事人主張 vs 客觀證據，❓標注需補充文件'
+  }[caseType] || '主要爭點的主張與證據比對';
+
+  // 模組 D：對造自承/不利陳述角度
+  var moduleD_detail = {
+    刑偵: '共犯供述中有利被告部分、證人陳述矛盾之處',
+    刑審: '共犯/證人自承對被告有利的陳述，標注「是否已整理入辯護書狀」',
+    民事: '對造書狀中的自認或承諾、前後矛盾之處',
+    行政: '機關函文前後矛盾之處、訴願答辯中的讓步或承認'
+  }[caseType] || '對造說過的有利於我方的話，標注攻防用途';
+
+  // 模組 E：庭前確認清單（必問限 3 題）
+  var moduleE_detail = {
+    刑偵: '①說法一致性確認 ②共犯/被害人最新動態 ③有無新事證需提出',
+    刑審: '①認罪或否認立場最終確認 ②今日傳喚證人關係 ③法官交辦事項完成度',
+    民事: '①授權範圍（尤其調解底線）②新發生事實 ③對造有無釋出和解訊號',
+    行政: '①機關內部立場有無變化 ②最新往來函文 ③有無新行政行為'
+  }[caseType] || '①當事人最新狀況 ②新事實/新證據 ③法官交辦事項';
+
+  // 模組 F：雷區
+  var moduleF_detail = {
+    刑偵: '🔴未知證據突然提示 🟡共犯翻供 🟡誘導性問題（避免陷阱）',
+    刑審: '🔴法官突襲詰問（未準備的法律問題） 🟡共同被告律師立場衝突 🟢當庭播放影片',
+    民事: '🔴法官詢問調解意願（暗示心證） 🟡對造當庭提出新文書 🟢法官突然指出訴訟標的問題',
+    行政: '🔴法官質疑訴訟類型（如應走撤銷而非確認之訴） 🟡機關當庭改論點 🟢訴訟費用問題'
+  }[caseType] || '🔴高機率雷區 🟡中機率 🟢低機率，各附具體處置話術';
+
+  return '---\n\n'
+    + '## A.【人物關係】\n'
+    + moduleA_detail + '\n'
+    + '格式：每人一行，「姓名／角色 → 今日狀態／立場」\n\n'
+
+    + '## B.【事實與程序時間軸】\n'
+    + moduleB_detail + '\n'
+    + '格式：🔴必提 / 🟡備用 / ⚪背景，上次庭期以來新增事項請**粗體**標注\n\n'
+
+    + '## C.【事實主張 vs 客觀證據比對】\n'
+    + moduleC_detail + '\n'
+    + '格式逐爭點：✅一致（證據支持我方）/ ⚠️矛盾（需解釋）/ ❓未驗證（無對應證據）/ ❌不利（證據支持對造）\n\n'
+
+    + '## D.【對造自承／不利陳述追蹤】\n'
+    + moduleD_detail + '\n'
+    + '格式：每條「陳述摘要 → 攻防用途 → 本次庭期是否使用（是/否/備用）」\n\n'
+
+    + '## E.【庭前快速確認清單】\n'
+    + '必問限 3 題：' + moduleE_detail + '\n'
+    + '格式：①②③ 各一行，具體問法\n\n'
+
+    + '## F.【雷區提示】\n'
+    + moduleF_detail + '\n'
+    + '每條標注機率（🔴高/🟡中/🟢低）+ 具體處置話術（一句話）\n\n';
+}
+
+/**
+ * 四套模板各自的專屬區塊
+ * 法官傾向（本地 DB）：GAS 無法查本地 DB，標注「（需另查 judge_stats）」提醒律師
+ */
+function buildTypeSpecificBlock_(caseType) {
+  var blocks = {
+    刑偵: '---\n\n'
+      + '## 【刑事偵查專屬】出庭核心策略\n'
+      + '請依「看牌→護板→記錄」三步驟分析：\n'
+      + '- 看牌：現階段推測偵查方向、檢察官手上可能有哪些證據\n'
+      + '- 護板：當事人哪些話不能說、哪些細節易被利用\n'
+      + '- 記錄：本次偵訊哪些陳述需要明確留紀錄（對日後審判有利）\n\n'
+      + '## 【刑事偵查專屬】量刑備案評估\n'
+      + '（本地 DB 法官傾向需另查 judge_stats — 請律師於開庭前補充）\n'
+      + '目前可先評估：若偵查轉向審判，起訴可能罪名、法定刑範圍、有利量刑因子',
+
+    刑審: '---\n\n'
+      + '## 【刑事審理專屬】法官傾向\n'
+      + '（本地 DB judge_stats 需另查 — 請律師於開庭前補充，或用 search_to_json.py --mode judge-stats 查詢）\n\n'
+      + '## 【刑事審理專屬】證據能力分析表\n'
+      + '逐一列出本案關鍵證據：\n'
+      + '| 證據 | 類型 | 能力爭議 | 處理建議 |\n'
+      + '|------|------|----------|----------|\n'
+      + '（依案件內容填入，資料不足時標注「待補」）\n\n'
+      + '## 【刑事審理專屬】交互詰問準備\n'
+      + '（依本次庭期類型：準備程序→爭點整理；調查程序→詰問問題清單；辯論程序→辯論要旨）\n\n'
+      + '## 【刑事審理專屬】量刑分析（主力）\n'
+      + '有利因子整理（自首、坦承、賠償、和解、初犯、品行、家庭狀況）\n'
+      + '不利因子及應對說法\n'
+      + '建議求刑區間（若 Notion 有類似判決資料，請據此分析）',
+
+    民事: '---\n\n'
+      + '## 【民事專屬】法官傾向\n'
+      + '（本地 DB 需另查 — 請律師補充，或用 search_to_json.py --mode fts --case-type V 查詢）\n\n'
+      + '## 【民事專屬】請求權基礎／訴訟標的\n'
+      + '主位請求：（依案件填入）\n'
+      + '備位請求：（如有）\n'
+      + '訴訟標的法律關係確認：攻擊/防禦方法是否與訴訟標的一致\n\n'
+      + '## 【民事專屬】舉證責任分配\n'
+      + '| 爭點 | 舉證責任在誰 | 我方現有證據 | 缺口 |\n'
+      + '|------|-------------|-------------|------|\n'
+      + '（依案件填入）\n\n'
+      + '## 【民事專屬】庭上發言優先序\n'
+      + '1. 最重要先講（法官注意力集中在開頭）\n'
+      + '2. 次要論點\n'
+      + '3. 備用（法官若詢問才提）\n'
+      + '各項建議發言時間控制',
+
+    行政: '---\n\n'
+      + '## 【行政訴訟專屬】法官傾向\n'
+      + '（本地 DB 需另查 — 請律師補充）\n\n'
+      + '## 【行政訴訟專屬】行政處分違法性六層架構\n'
+      + '逐層檢查（有問題者標 ⚠️）：\n'
+      + '① 主體適法性（有無裁量權限）\n'
+      + '② 程序合法性（通知、陳述意見、理由說明）\n'
+      + '③ 事實認定正確性（認定事實是否有證據支撐）\n'
+      + '④ 法律適用正確性（適用法條是否正確）\n'
+      + '⑤ 裁量瑕疵（有無逾越、濫用或怠惰裁量）\n'
+      + '⑥ 結果比例性（處分輕重與違規情節是否相當）\n\n'
+      + '## 【行政訴訟專屬】行政法原則攻防\n'
+      + '（依本案選用相關原則，未涉及者標「不適用」）\n'
+      + '- 比例原則：\n'
+      + '- 信賴保護原則：\n'
+      + '- 平等原則（不當差別對待）：\n'
+      + '- 法律明確性原則：\n'
+      + '- 正當程序原則：\n'
+      + '- 禁止不當聯結原則：\n\n'
+      + '## 【行政訴訟專屬】舉證責任分配（詳版）\n'
+      + '行政訴訟舉證責任分配原則（§136行訴法→民訴§277準用）\n'
+      + '本案各爭點舉證責任歸屬及現有證據評估'
   };
 
-  var template = templates[caseType] || templates['刑審'];
-  return header + notionSection + template;
+  return blocks[caseType] || blocks['刑審'];
 }
 
 // ======================== LINE 通知 ========================
@@ -759,18 +880,28 @@ function buildCourtPrepPrompt_(caseType, caseInfo, notionContent) {
  */
 function notifyLineCourtPrepDone_(caseInfo, notionPageUrl, isChen) {
   var typeLabel = { 刑偵: '刑事偵查', 刑審: '刑事審理', 民事: '民事', 行政: '行政訴訟' };
-  var label = typeLabel[caseInfo.caseType] || caseInfo.caseType;
 
-  var msg = '📋 開庭準備已自動生成\n';
-  msg += '━━━━━━━━━━━━━\n';
-  msg += '📌 ' + (caseInfo.caseName || caseInfo.caseNumber || '（未知案件）') + '\n';
-  msg += '⚖️ ' + label + '\n';
-  msg += '📅 ' + caseInfo.date + ' ' + caseInfo.time;
-  if (caseInfo.location) msg += '\n📍 ' + caseInfo.location;
-  if (caseInfo.judge) msg += '\n👨‍⚖️ ' + caseInfo.judge;
-  else if (caseInfo.division) msg += '\n👨‍⚖️ ' + caseInfo.division;
-  if (notionPageUrl) msg += '\n\n📖 ' + notionPageUrl;
-  else msg += '\n\n⚠️ Notion 頁面建立失敗（找不到案件頁），請手動處理';
+  // 從 location 提取法院名稱（去掉地址、法庭編號等）
+  var courtName = '';
+  if (caseInfo.location) {
+    var cm = caseInfo.location.match(/([^\s,，]+(?:地院|高院|地方法院|高等法院|行政法院|高等行政法院))/);
+    courtName = cm ? cm[1] : caseInfo.location.split(/[,，\s]/)[0];
+  }
+
+  var msg = '📋 開庭準備已產出\n\n';
+  msg += '案件：' + (caseInfo.caseName || caseInfo.caseNumber || '（未知）') + '\n';
+  msg += '庭期：' + caseInfo.date + ' ' + caseInfo.time + '\n';
+  msg += '法院：' + (courtName || '（未填）') + '\n';
+  msg += '類型：' + (typeLabel[caseInfo.caseType] || caseInfo.caseType)
+       + '｜' + caseInfo.hearingType + '\n';
+
+  if (notionPageUrl) {
+    msg += '\n👉 ' + notionPageUrl + '\n';
+  } else {
+    msg += '\n⚠️ Notion 頁面建立失敗（找不到案件頁），請手動處理\n';
+  }
+
+  msg += '\n⚠️ 自動產出，開庭前請覆核';
 
   var msgs = [{ type: 'text', text: msg }];
   sendAutoCourtPrepLine_(CONFIG.LINE_USER_ID, msgs);
