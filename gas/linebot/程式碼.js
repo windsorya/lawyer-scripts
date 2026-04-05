@@ -1,6 +1,7 @@
-// LINE Bot v2.2 - 全時段自動回覆 + 統一 Push 備查
+// LINE Bot v2.3 - 全時段自動回覆 + 統一 Push 備查
 // v2.0→v2.1: isDuplicate 改為只擋同用戶同內容重複訊息，不擋連續不同訊息
 // v2.1→v2.2: 黑名單過濾垃圾訊息 + 備查顯示 userId
+// v2.2→v2.3: 律師 LINE 指令封鎖垃圾用戶（封鎖+名字 → 查 Notion → blockUser）
 // 2026-04-05
 
 // ⚠️ 不要跑 setupAllProperties — Script Properties 已手動設定好
@@ -43,6 +44,20 @@ function doPost(e){
     var events=data.events||[];
     for(var i=0;i<events.length;i++){
       if(events[i].type!=='message')continue;
+      // 律師指令處理
+      var msg=events[i].message;
+      if(msg&&msg.type==='text'){
+        var srcUserId=events[i].source.userId;
+        var lawyerId=PropertiesService.getScriptProperties().getProperty('LAWYER_LINE_USER_ID');
+        var txt=msg.text.trim();
+        if(srcUserId===lawyerId&&txt.indexOf('封鎖')===0){
+          var targetName=txt.substring(2).trim();
+          if(targetName){
+            handleBlockCommand_(events[i].replyToken,targetName);
+            continue;
+          }
+        }
+      }
       processMessageEvent_(events[i]);
     }
   }catch(err){Logger.log('doPost error: '+err.message);}
@@ -441,6 +456,54 @@ function testPush(){
   var CONFIG=getConfig_();
   Logger.log('LAWYER_ID: '+CONFIG.LAWYER_LINE_USER_ID);
   pushToLawyer_('🔔 Push 測試：如果你看到這則訊息，代表通知功能正常。',CONFIG);
+}
+
+// ===== 律師指令：封鎖用戶 =====
+// 用法：律師在 LINE 傳「封鎖 顯示名稱」→ 查 Notion 取 userId → blockUser
+function handleBlockCommand_(replyToken,targetName){
+  var CONFIG=getConfig_();
+  var payload={
+    filter:{property:'標題',title:{contains:targetName}},
+    sorts:[{property:'時間戳',direction:'descending'}],
+    page_size:5
+  };
+  try{
+    var response=UrlFetchApp.fetch('https://api.notion.com/v1/databases/'+CONFIG.NOTION_DB_ID+'/query',{
+      method:'post',
+      headers:{
+        'Authorization':'Bearer '+CONFIG.NOTION_API_KEY,
+        'Content-Type':'application/json',
+        'Notion-Version':'2022-06-28'
+      },
+      payload:JSON.stringify(payload),
+      muteHttpExceptions:true
+    });
+    if(response.getResponseCode()!==200){
+      Logger.log('handleBlockCommand_ Notion fail: '+response.getResponseCode()+' '+response.getContentText());
+      replyToLine_(replyToken,'❌ Notion 查詢失敗（HTTP '+response.getResponseCode()+'）',CONFIG);
+      return;
+    }
+    var data=JSON.parse(response.getContentText());
+    if(!data.results||data.results.length===0){
+      replyToLine_(replyToken,'❌ 找不到 '+targetName+' 的紀錄',CONFIG);
+      return;
+    }
+    // 取最新的（已按時間戳降序）
+    var page=data.results[0];
+    var props=page.properties;
+    var targetUserId=extractRichText_(props['LINE User ID']);
+    if(!targetUserId){
+      replyToLine_(replyToken,'❌ 找到 '+targetName+' 的紀錄但缺少 LINE User ID',CONFIG);
+      return;
+    }
+    blockUser(targetUserId);
+    var displayName=getUserDisplayName_(targetUserId,CONFIG);
+    var shortId=targetUserId.substring(0,8)+'...';
+    replyToLine_(replyToken,'✅ 已封鎖 '+displayName+' ('+shortId+')',CONFIG);
+  }catch(err){
+    Logger.log('handleBlockCommand_ error: '+err.message);
+    replyToLine_(replyToken,'❌ 封鎖指令執行失敗：'+err.message,CONFIG);
+  }
 }
 
 // ===== 修復工具 =====
