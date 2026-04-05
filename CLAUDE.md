@@ -70,6 +70,13 @@ commit message 格式：
 格式：`- YYYY-MM-DD 描述（⏳待claude.ai同步）`
 claude.ai 確認同步後會將 ⏳ 改為 ✅。
 
+### 重大變更通知律師（強制）
+完成重大變更（新腳本、版本升級、新能力、配置修復）後，除了寫 CHANGELOG，還必須推 LINE 通知律師：
+```bash
+cd ~/lawyer-scripts/gas/morning-briefing && clasp run diagLinePush --params '[" CC完成：[簡述變更內容]。下次跟Claude提一下讓他同步Memory。"]'
+```
+這確保律師知道CC做了什麼，也讓 claude.ai 能透過律師得知新能力。
+
 ### CC prompt 複雜度控制
 - CC 對複雜多步驟 prompt 不穩定，超過 3 個主要步驟必須拆成多次呼叫
 - CC 報 failed 不代表全部失敗——先檢查哪些步驟已完成，從斷點繼續
