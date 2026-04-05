@@ -81,3 +81,13 @@ commit message 格式：
 - pdfplumber 大量頁面極慢，用 PyMuPDF (fitz) 替代
 - Google Drive FUSE 掛載不穩定（ls 就 deadlock），用 Drive API 操作
 - Gemini 中文路徑：shutil.copy2 到 tempfile + display_name ASCII 化
+
+---
+## CHANGELOG（claude.ai 同步用）
+claude.ai 涉及 CC 相關話題時，會讀取此段落確認有無未同步的更新。
+CC 完成重大變更後在此新增一行，claude.ai 同步到外接硬碟後標記 ✅。
+
+- 2026-04-05 clasp run 已可用：GCP綁定+scope重授權+setScriptProperty，可遠端觸發GAS函式（⏳待claude.ai同步）
+- 2026-04-05 consultation-followup-notify v1.0 部署（✅已同步）
+- 2026-04-05 clasp 安裝+login+clone（✅已同步）
+- 2026-04-05 gemini_pdf_extract v7 --drive-file-id（✅已同步）
