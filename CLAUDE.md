@@ -71,16 +71,19 @@ commit message 格式：
 claude.ai 確認同步後會將 ⏳ 改為 ✅。
 
 ### 重大變更通知律師（強制）
-完成重大變更（新腳本、版本升級、新能力、配置修復）後，除了寫 CHANGELOG，還必須推 LINE 通知律師。
-訊息格式必須是律師可一鍵轉貼給 claude.ai 的提示語：
+完成重大變更後，除了寫 CHANGELOG，推 LINE 通知律師。
+訊息必須包含 claude.ai/new?q= 連結，律師點一下就自動開新對話帶入提示語，零打字：
 
 ```bash
-cd ~/lawyer-scripts/gas/morning-briefing && clasp run diagLinePush --params '["🔔 CC完成：[簡述變更內容]\n\n請貼給Claude：\nCC已完成[具體變更]，請同步Memory。"]'
-```
+# URL encode 提示語
+PROMPT="CC已完成[具體變更]，請更新Memory。"
+ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PROMPT}'))")
+MSG="🔔 CC完成：[簡述]
 
-範例：
-```bash
-clasp run diagLinePush --params '["🔔 CC完成：clasp run可遠端觸發GAS\n\n請貼給Claude：\nCC已完成clasp run修復（GCP綁定+scope重授權+setScriptProperty），現在可以用clasp run直接觸發GAS函式，請更新Memory。"]'
+👉 點此同步Claude：
+https://claude.ai/new?q=${ENCODED}"
+
+cd ~/lawyer-scripts/gas/morning-briefing && clasp run diagLinePush --params "[\"${MSG}\"]"
 ```
 
 ### CC prompt 複雜度控制
