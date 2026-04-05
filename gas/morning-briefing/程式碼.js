@@ -97,6 +97,7 @@ function truncateLabel_(text, maxLen) {
 
 function sendMorningBriefing() {
   try { ensureConsultationFollowupTrigger_(); } catch(e) { Logger.log('Trigger check failed: ' + e); }
+  try { ensureAutoCourtPrepTrigger_(); } catch(e) { Logger.log('autoCourtPrep trigger: ' + e); }
   var today = new Date();
   var todayStr = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy/MM/dd (EEE)');
 
