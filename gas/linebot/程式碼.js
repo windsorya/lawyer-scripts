@@ -43,15 +43,20 @@ function doPost(e){
     var body=e.postData.contents;
     var data=JSON.parse(body);
     var events=data.events||[];
+    var CONFIG=getConfig_();
     for(var i=0;i<events.length;i++){
       if(events[i].type!=='message')continue;
       var msg=events[i].message;
       var srcUserId=events[i].source.userId;
-      var lawyerId=PropertiesService.getScriptProperties().getProperty('LAWYER_LINE_USER_ID');
+      var lawyerId=CONFIG.LAWYER_LINE_USER_ID;
 
-      // 檔案訊息 → 收發文流程
+      // 檔案訊息：僅律師走收發文流程，非律師回 fallback
       if(msg&&msg.type==='file'){
-        if(!isBlockedUser_(srcUserId))handleFileMessage_(events[i]);
+        if(srcUserId===lawyerId){
+          handleFileMessage_(events[i]);
+        }else if(!isBlockedUser_(srcUserId)){
+          replyToLine_(events[i].replyToken,'您好，目前僅支援文字訊息的自動處理。\n\n如有法律問題，歡迎直接用文字描述您的狀況，律師會儘快回覆您。',CONFIG);
+        }
         continue;
       }
 
@@ -823,6 +828,14 @@ function redraftMessage_(originalDraft,instruction,config){
     Logger.log('redraftMessage_ error: '+err.message);
     return null;
   }
+}
+
+// 列出所有 Script Properties（診斷用）
+function listAllProps_(){
+  return JSON.stringify(PropertiesService.getScriptProperties().getProperties());
+}
+function listAllProps(){
+  return listAllProps_();
 }
 
 // 測試：模擬收發文流程（不實際下載 LINE 檔案）
