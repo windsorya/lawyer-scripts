@@ -643,9 +643,9 @@ function uploadToDrive_(fileBlob,fileName){
 
 // 用 Claude API 辨識 PDF 文件類別（document type，支援 PDF input）
 function classifyDocument_(fileBase64,config){
-  var defaultResult={category:'其他',caseNumber:'',partyName:'',court:'',keyDates:'',summary:''};
+  var defaultResult={direction:'收文',category:'其他',caseNumber:'',partyName:'',court:'',keyDates:'',summary:''};
   try{
-    var promptText='請分析這份法律文件，以 JSON 格式回覆以下欄位（只回 JSON，不加任何說明或 markdown）：\n{"category":"文件類別（判決書/裁定/開庭通知/傳票/公文/書狀/起訴書/不起訴處分書/其他）","caseNumber":"案號","partyName":"當事人姓名","court":"法院名稱","keyDates":"關鍵日期（如開庭日期、上訴期限等，格式：YYYY-MM-DD）","summary":"文件重點摘要（50字內）"}';
+    var promptText='請分析這份法律文件，以 JSON 格式回覆以下欄位（只回 JSON，不加任何說明或 markdown）：\n{"direction":"收文或發文","category":"文件類別（判決書/裁定書/開庭通知/傳票/公文/書狀/起訴書/不起訴處分書/緩起訴處分書/調解通知/其他）","caseNumber":"案號","partyName":"當事人姓名","court":"法院或機關名稱","keyDates":"關鍵日期（如開庭日期、上訴期限等，格式：YYYY-MM-DD）","summary":"文件重點摘要（50字內）"}\n\ndirection 判斷規則：\n- 文件上蓋有法院/地檢/行政機關印信，或有「受文者」標記 → 收文\n- 內容是律師撰寫的書狀格式（如起訴狀、答辯狀、聲請狀）→ 發文\n- 檔名含【王律】搭配機關名稱的函文 → 看內容判斷，機關發給律師=收文\n- 不確定 → 預設收文';
     var payload={
       model:'claude-sonnet-4-20250514',
       max_tokens:1000,
@@ -693,8 +693,9 @@ function classifyDocument_(fileBase64,config){
   }
 }
 
-// 用 Claude 動態生成當事人通知訊息（取代固定模板）
+// 用 Claude 動態生成當事人通知訊息（收發文雙模板）
 function draftForwardMessageClaude_(classifyResult,config){
+  var direction=classifyResult.direction||'收文';
   var category=classifyResult.category||'其他';
   var partyName=classifyResult.partyName||'';
   var caseNumber=classifyResult.caseNumber||'（案號未辨識）';
@@ -703,29 +704,15 @@ function draftForwardMessageClaude_(classifyResult,config){
   var summary=classifyResult.summary||'';
 
   try{
-    var prompt='你是王志文律師事務所的助理，幫律師擬一則通知當事人的 LINE 訊息。\n\n';
-    prompt+='## 王律師的發文風格（必須遵守）\n';
-    prompt+='- 稱呼：取當事人姓氏第一個字 + 先生/小姐；無法判斷就用「您好」\n';
-    prompt+='- 語氣正式但有溫度，像真人在打字，不用罐頭化語句\n';
-    prompt+='- 直接告知重點，不繞圈子，不說廢話\n';
-    prompt+='- 有期限的文件（開庭、上訴、答辯），一定明確點出日期並加提醒，讓當事人感受到緊迫性\n';
-    prompt+='- 判決書必須說明上訴期限（通常 20 天），提醒逾期不可救\n';
-    prompt+='- 全程用「您」，不用「你」或「妳」\n';
-    prompt+='- 結尾署名：王志文律師 敬上\n';
-    prompt+='- 長度：100-180 字，精準不冗長\n\n';
-    prompt+='## 文件資訊\n';
-    prompt+='- 文件類別：'+category+'\n';
-    prompt+='- 案號：'+caseNumber+'\n';
-    prompt+='- 當事人：'+(partyName||'（未辨識）')+'\n';
-    prompt+='- 機關/法院：'+(court||'（未辨識）')+'\n';
-    prompt+='- 關鍵日期：'+(keyDates||'無')+'\n';
-    prompt+='- 文件重點：'+(summary||'（無）')+'\n\n';
-    prompt+='直接輸出可傳給當事人的 LINE 訊息全文，不加任何說明或前言。';
+    var systemPrompt='你是王志文律師事務所的文件轉傳訊息撰寫助手。根據文件辨識結果，擬一則 LINE 訊息供律師轉傳給當事人。\n\n通用規則：\n- 稱呼：[姓][先生/小姐]，不確定性別用「[姓名]您好」\n- 一律用「您」不用「你/妳」\n- 結尾用「我們」代表事務所，不用「我」\n- 禁止寫「如有問題請隨時來電」，正確：「有任何問題跟我們說」\n- 禁止承諾追蹤頻率如「我會第一時間通知」\n- 語氣：禮貌簡潔專業，不用法律術語，重點明確\n- 結尾「謝謝！」\n\n收文模板（事務所收到外部機關文件）：\n\n開庭通知：\n[稱呼]您好\n此為[法院全稱]開庭通知書，通知您如下：\n📌 案號：[案號]\n📅 日期：[民國年月日]\n⏰ 時間：[上午/下午][時間]\n📍 地點：[法院全稱] [法庭]\n再麻煩您屆時提早15分鐘左右抵達與律師會合，謝謝！\n\n判決書/裁定書：\n[稱呼]您好，[判決書/裁定書]今天事務所也收到了，將傳給您。\n[白話結果摘要]\n上訴期限是[日期]。[後續觀察重點]\n您先看一下內容，有任何問題跟我們說。\n\n不起訴/緩起訴處分書：\n[稱呼]您好，處分書今天事務所也收到了，將傳給您。\n[白話說明結果和效果]\n您先看一下內容，有任何問題跟我們說。\n\n一般公文函文：\n[稱呼]您好\n今日收受[機關全稱]的[公文類型]，將公文傳給您參考。\n[簡述重點及當事人需做的事]\n有任何問題跟我們說，謝謝！\n\n調解通知：\n[稱呼]您好\n收到調解通知書了，通知您如下：\n📅 日期：[民國年月日]\n⏰ 時間：[上午/下午][時間]\n📍 地點：[調解委員會全稱]（[地址]）\n當天請記得帶身分證正本影本和印章。\n再麻煩您屆時提早到場，與律師會合，謝謝！\n\n發文模板（事務所向外部機關提出文件）：\n[稱呼]您好\n本所已於[日期]向[法院/機關全稱]提出「[書狀名稱]」。\n[一句話說明書狀重點]\n後續等待回覆，有任何進展會再通知您，謝謝！\n\n重要：收文語氣是「收到了，轉傳給您」；發文語氣是「已提出，等回覆」。絕對不能搞反。';
+
+    var userPrompt='文件辨識結果：\n- 收發文方向：'+direction+'\n- 文件類別：'+category+'\n- 案號：'+caseNumber+'\n- 當事人：'+(partyName||'（未辨識）')+'\n- 法院/機關：'+(court||'（未辨識）')+'\n- 關鍵日期：'+(keyDates||'無')+'\n- 摘要：'+(summary||'（無）')+'\n\n請根據上述資訊和收發文方向，選擇正確模板擬一則 LINE 訊息。只輸出訊息本文，不加任何解釋。';
 
     var payload={
       model:'claude-sonnet-4-6',
       max_tokens:600,
-      messages:[{role:'user',content:prompt}]
+      system:systemPrompt,
+      messages:[{role:'user',content:userPrompt}]
     };
     var response=UrlFetchApp.fetch('https://api.anthropic.com/v1/messages',{
       method:'post',
@@ -780,9 +767,10 @@ function pushReviewToLawyer_(classifyResult,draftMessage,driveFileUrl,config){
   var category=classifyResult.category||'其他';
   var court=classifyResult.court||'（未辨識）';
   var keyDates=classifyResult.keyDates||'無';
+  var direction=classifyResult.direction||'收文';
 
   // 泡泡一：案件摘要 + 操作說明
-  var summaryText='📄 收發文處理完成\n案件：'+partyName+'（'+caseNumber+'）\n文件：'+category+'\n法院：'+court+'\n關鍵日期：'+keyDates+'\n已存：'+(driveFileUrl||'（上傳失敗）')+'\n\n👉 回覆「送出」→ 取得可複製訊息\n👉 回覆「改 [指示]」→ Claude 重新擬稿';
+  var summaryText='📄 收發文處理完成\n方向：'+direction+'\n案件：'+partyName+'（'+caseNumber+'）\n文件：'+category+'\n法院：'+court+'\n關鍵日期：'+keyDates+'\n已存：'+(driveFileUrl||'（上傳失敗）')+'\n\n👉 回覆「送出」→ 取得可複製訊息\n👉 回覆「改 [指示]」→ Claude 重新擬稿';
   pushToLawyer_(summaryText,config);
 
   // 泡泡二：草稿全文（獨立泡泡，方便直接閱讀與確認）
