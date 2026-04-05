@@ -1,8 +1,9 @@
-// LINE Bot v2.3 - 全時段自動回覆 + 統一 Push 備查
+// LINE Bot v2.4 - 收發文自動化 + 全時段自動回覆 + 統一 Push 備查
 // v2.0→v2.1: isDuplicate 改為只擋同用戶同內容重複訊息，不擋連續不同訊息
 // v2.1→v2.2: 黑名單過濾垃圾訊息 + 備查顯示 userId
 // v2.2→v2.3: 律師 LINE 指令封鎖垃圾用戶（封鎖+名字 → 查 Notion → blockUser）
-// 2026-04-05
+// v2.3→v2.4: 收發文自動化（file message → Drive 上傳 + Claude 辨識 + 擬稿 + 律師審核）
+// 2026-04-06
 
 // ⚠️ 不要跑 setupAllProperties — Script Properties 已手動設定好
 // 此函式僅用於檢查目前的 properties 是否齊全
@@ -44,20 +45,30 @@ function doPost(e){
     var events=data.events||[];
     for(var i=0;i<events.length;i++){
       if(events[i].type!=='message')continue;
-      // 律師指令處理
       var msg=events[i].message;
-      if(msg&&msg.type==='text'){
-        var srcUserId=events[i].source.userId;
-        var lawyerId=PropertiesService.getScriptProperties().getProperty('LAWYER_LINE_USER_ID');
+      var srcUserId=events[i].source.userId;
+      var lawyerId=PropertiesService.getScriptProperties().getProperty('LAWYER_LINE_USER_ID');
+
+      // 檔案訊息 → 收發文流程
+      if(msg&&msg.type==='file'){
+        if(!isBlockedUser_(srcUserId))handleFileMessage_(events[i]);
+        continue;
+      }
+
+      // 律師文字指令
+      if(msg&&msg.type==='text'&&srcUserId===lawyerId){
         var txt=msg.text.trim();
-        if(srcUserId===lawyerId&&txt.indexOf('封鎖')===0){
+        if(txt.indexOf('封鎖')===0){
           var targetName=txt.substring(2).trim();
-          if(targetName){
-            handleBlockCommand_(events[i].replyToken,targetName);
-            continue;
-          }
+          if(targetName){handleBlockCommand_(events[i].replyToken,targetName);continue;}
+        }
+        if(txt==='送出'){handleSendCommand_(events[i].replyToken);continue;}
+        if(txt.indexOf('改 ')===0){
+          var editInstruction=txt.substring(2).trim();
+          if(editInstruction){handleEditCommand_(events[i].replyToken,editInstruction);continue;}
         }
       }
+
       processMessageEvent_(events[i]);
     }
   }catch(err){Logger.log('doPost error: '+err.message);}
@@ -547,28 +558,278 @@ function listBlockedUsers(){
   else{Logger.log('共'+list.length+'筆封鎖：\n'+list.join('\n'));}
 }
 
-function testBlock(){
-  blockUser('Ud97020e3f9e57d935ae969fac8dee306');
-  listBlockedUsers();
+// ===== 收發文自動化 =====
+// Drive 資料夾 ID：100.收發文 (1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b)
+var MAIL_FOLDER_ID_='1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b';
+
+function handleFileMessage_(event){
+  var CONFIG=getConfig_();
+  var messageId=event.message.id;
+  var fileName=event.message.fileName||('doc_'+messageId+'.pdf');
+
+  // 1. 下載檔案
+  var fileBlob=downloadFromLine_(messageId,fileName,CONFIG);
+  if(!fileBlob){
+    pushToLawyer_('❌ 收發文：LINE 檔案下載失敗（messageId: '+messageId+'）',CONFIG);
+    return;
+  }
+
+  // 2. 取 base64 供 Claude 辨識（getBytes() 不消耗 Blob，可多次呼叫）
+  var fileBase64=Utilities.base64Encode(fileBlob.getBytes());
+
+  // 3. 上傳到 Drive
+  var driveFileUrl=uploadToDrive_(fileBlob,fileName);
+
+  // 4. Claude 辨識文件
+  var classifyResult=classifyDocument_(fileBase64,CONFIG);
+
+  // 5. 擬訊息
+  var draftMessage=draftForwardMessage_(classifyResult,driveFileUrl);
+
+  // 6. 推審核給律師
+  pushReviewToLawyer_(classifyResult,draftMessage,driveFileUrl,CONFIG);
 }
 
-function issueNewToken(){
-  var resp=UrlFetchApp.fetch('https://api.line.me/v2/oauth/accessToken',{
-    method:'post',
-    contentType:'application/x-www-form-urlencoded',
-    payload:'grant_type=client_credentials&client_id=1661418618&client_secret=***LINE_SECRET_REDACTED***',
-    muteHttpExceptions:true
-  });
-  Logger.log('Status: '+resp.getResponseCode());
-  Logger.log('Body: '+resp.getContentText());
-  if(resp.getResponseCode()===200){
-    var token=JSON.parse(resp.getContentText()).access_token;
-    PropertiesService.getScriptProperties().setProperty('LINE_CHANNEL_ACCESS_TOKEN',token);
-    Logger.log('✅ Token 已更新，長度：'+token.length);
+// 從 LINE Content API 下載檔案二進位
+function downloadFromLine_(messageId,fileName,config){
+  try{
+    var response=UrlFetchApp.fetch(
+      'https://api-data.line.me/v2/bot/message/'+messageId+'/content',
+      {
+        method:'get',
+        headers:{'Authorization':'Bearer '+config.LINE_CHANNEL_ACCESS_TOKEN},
+        muteHttpExceptions:true
+      }
+    );
+    if(response.getResponseCode()!==200){
+      Logger.log('LINE Content API fail: '+response.getResponseCode()+' '+response.getContentText());
+      return null;
+    }
+    return response.getBlob().setName(fileName);
+  }catch(err){
+    Logger.log('downloadFromLine_ error: '+err.message);
+    return null;
   }
 }
 
-function setupBlockList_() {
-  PropertiesService.getScriptProperties().setProperty('BLOCKED_USER_IDS', JSON.stringify(["Ud97020e3f9e57d935ae969fac8dee306"]));
-  Logger.log('BLOCKED_USER_IDS 已設定: ' + PropertiesService.getScriptProperties().getProperty('BLOCKED_USER_IDS'));
+// 上傳到 Drive 的「{民國年}年收發文」子資料夾
+function uploadToDrive_(fileBlob,fileName){
+  try{
+    var year=new Date().getFullYear()-1911;
+    var subFolderName=year+'年收發文';
+    var parentFolder=DriveApp.getFolderById(MAIL_FOLDER_ID_);
+    var subFolder;
+    var folders=parentFolder.getFoldersByName(subFolderName);
+    if(folders.hasNext()){
+      subFolder=folders.next();
+    }else{
+      subFolder=parentFolder.createFolder(subFolderName);
+      Logger.log('建立子資料夾：'+subFolderName);
+    }
+    var uploadedFile=subFolder.createFile(fileBlob.setName(fileName));
+    Logger.log('Drive 上傳完成：'+fileName+' → '+uploadedFile.getUrl());
+    return uploadedFile.getUrl();
+  }catch(err){
+    Logger.log('uploadToDrive_ error: '+err.message);
+    return null;
+  }
+}
+
+// 用 Claude API 辨識 PDF 文件類別（document type，支援 PDF input）
+function classifyDocument_(fileBase64,config){
+  var defaultResult={category:'其他',caseNumber:'',partyName:'',court:'',keyDates:'',summary:''};
+  try{
+    var promptText='請分析這份法律文件，以 JSON 格式回覆以下欄位（只回 JSON，不加任何說明或 markdown）：\n{"category":"文件類別（判決書/裁定/開庭通知/傳票/公文/書狀/起訴書/不起訴處分書/其他）","caseNumber":"案號","partyName":"當事人姓名","court":"法院名稱","keyDates":"關鍵日期（如開庭日期、上訴期限等，格式：YYYY-MM-DD）","summary":"文件重點摘要（50字內）"}';
+    var payload={
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1000,
+      messages:[{
+        role:'user',
+        content:[
+          {
+            type:'document',
+            source:{
+              type:'base64',
+              media_type:'application/pdf',
+              data:fileBase64
+            }
+          },
+          {type:'text',text:promptText}
+        ]
+      }]
+    };
+    var response=UrlFetchApp.fetch('https://api.anthropic.com/v1/messages',{
+      method:'post',
+      contentType:'application/json',
+      headers:{
+        'x-api-key':config.ANTHROPIC_API_KEY,
+        'anthropic-version':'2023-06-01',
+        'anthropic-beta':'pdfs-2024-09-25'
+      },
+      payload:JSON.stringify(payload),
+      muteHttpExceptions:true
+    });
+    var code=response.getResponseCode();
+    if(code!==200){
+      Logger.log('classifyDocument_ API fail: '+code+' '+response.getContentText());
+      return defaultResult;
+    }
+    var result=JSON.parse(response.getContentText());
+    var textBlocks=(result.content||[]).filter(function(b){return b.type==='text';});
+    if(textBlocks.length===0)return defaultResult;
+    var text=textBlocks[0].text.trim();
+    // 去除可能的 markdown code fence
+    text=text.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'').trim();
+    return JSON.parse(text);
+  }catch(err){
+    Logger.log('classifyDocument_ error: '+err.message);
+    return defaultResult;
+  }
+}
+
+// 根據文件類別擬當事人通知訊息
+function draftForwardMessage_(classifyResult,driveFileUrl){
+  var category=classifyResult.category||'其他';
+  var partyName=classifyResult.partyName||'';
+  var caseNumber=classifyResult.caseNumber||'（案號未辨識）';
+  var court=classifyResult.court||'';
+  var keyDates=classifyResult.keyDates||'';
+  var summary=classifyResult.summary||'';
+
+  // 稱呼：取姓（第一個字）+ 先生/小姐佔位
+  var salutation=partyName?partyName.charAt(0)+'先生/小姐，您好：':'您好：';
+
+  var msg='';
+  if(category==='開庭通知'){
+    msg=salutation+'\n\n您的案件（'+caseNumber+'）已收到'+court+'開庭通知。\n\n';
+    if(keyDates)msg+='庭期：'+keyDates+'\n\n';
+    msg+='請務必準時到庭，如有任何問題或需要協助準備，請提前與事務所聯繫。\n\n王志文律師敬上';
+  }else if(category==='判決書'){
+    msg=salutation+'\n\n您的案件（'+caseNumber+'）已收到'+court+'判決書。\n\n';
+    if(summary)msg+='判決重點：'+summary+'\n\n';
+    if(keyDates)msg+='重要期限：'+keyDates+'（請注意上訴期限，逾期不可上訴）\n\n';
+    msg+='如需進一步說明或討論後續，請與事務所聯繫。\n\n王志文律師敬上';
+  }else if(category==='裁定'){
+    msg=salutation+'\n\n您的案件（'+caseNumber+'）已收到'+court+'裁定。\n\n';
+    if(summary)msg+='裁定內容：'+summary+'\n\n';
+    if(keyDates)msg+='相關期限：'+keyDates+'\n\n';
+    msg+='後續動作請與事務所確認。\n\n王志文律師敬上';
+  }else if(category==='傳票'){
+    msg=salutation+'\n\n您收到'+court+'傳票，案號：'+caseNumber+'。\n\n';
+    if(keyDates)msg+='出庭日期：'+keyDates+'\n\n';
+    msg+='請攜帶身分證件準時到庭，如有任何疑問，請提前與事務所聯繫。\n\n王志文律師敬上';
+  }else{
+    msg=salutation+'\n\n您有一份來自'+(court||'相關機關')+'的文件，案號：'+caseNumber+'。\n\n';
+    if(summary)msg+='文件說明：'+summary+'\n\n';
+    if(keyDates)msg+='相關日期：'+keyDates+'\n\n';
+    msg+='如有任何問題，歡迎與事務所聯繫。\n\n王志文律師敬上';
+  }
+  return msg;
+}
+
+// 推審核訊息給律師，並暫存草稿（CacheService，6小時）
+function pushReviewToLawyer_(classifyResult,draftMessage,driveFileUrl,config){
+  // 暫存供「送出」/「改 xxx」指令使用
+  var cache=CacheService.getScriptCache();
+  var cacheKey='pending_draft_'+config.LAWYER_LINE_USER_ID;
+  cache.put(cacheKey,JSON.stringify({
+    classifyResult:classifyResult,
+    draftMessage:draftMessage,
+    driveFileUrl:driveFileUrl
+  }),21600);
+
+  var partyName=classifyResult.partyName||'（未辨識）';
+  var caseNumber=classifyResult.caseNumber||'（未辨識）';
+  var category=classifyResult.category||'其他';
+  var court=classifyResult.court||'（未辨識）';
+  var keyDates=classifyResult.keyDates||'無';
+
+  var reviewText='📄 收發文處理完成\n案件：'+partyName+'（'+caseNumber+'）\n文件：'+category+'\n法院：'+court+'\n關鍵日期：'+keyDates+'\n已存：'+(driveFileUrl||'（上傳失敗）')+'\n\n擬發給當事人的訊息：\n「'+draftMessage+'」\n\n👉 回覆「送出」可複製訊息\n👉 回覆「改 [修改內容]」可調整';
+
+  pushToLawyer_(reviewText,config);
+}
+
+// 律師回覆「送出」→ 回傳可複製的訊息全文
+function handleSendCommand_(replyToken){
+  var CONFIG=getConfig_();
+  var cache=CacheService.getScriptCache();
+  var cacheKey='pending_draft_'+CONFIG.LAWYER_LINE_USER_ID;
+  var raw=cache.get(cacheKey);
+  if(!raw){
+    replyToLine_(replyToken,'❌ 沒有待發訊息（可能已過期，請重新傳送文件）',CONFIG);
+    return;
+  }
+  var data=JSON.parse(raw);
+  var copyText='✅ 以下是擬好的訊息，請複製後轉傳給當事人：\n\n'+data.draftMessage;
+  replyToLine_(replyToken,copyText,CONFIG);
+}
+
+// 律師回覆「改 xxx」→ Claude 重新擬稿後推審核
+function handleEditCommand_(replyToken,instruction){
+  var CONFIG=getConfig_();
+  var cache=CacheService.getScriptCache();
+  var cacheKey='pending_draft_'+CONFIG.LAWYER_LINE_USER_ID;
+  var raw=cache.get(cacheKey);
+  if(!raw){
+    replyToLine_(replyToken,'❌ 沒有待修改訊息（可能已過期，請重新傳送文件）',CONFIG);
+    return;
+  }
+  var data=JSON.parse(raw);
+
+  // 用 Claude 重新擬稿
+  var newDraft=redraftMessage_(data.draftMessage,instruction,CONFIG);
+  if(!newDraft){
+    replyToLine_(replyToken,'❌ Claude 改稿失敗，請再試一次',CONFIG);
+    return;
+  }
+
+  // 更新 cache
+  data.draftMessage=newDraft;
+  cache.put(cacheKey,JSON.stringify(data),21600);
+
+  var partyName=data.classifyResult.partyName||'（未辨識）';
+  var caseNumber=data.classifyResult.caseNumber||'（未辨識）';
+  var reviewText='✏️ 已改稿（'+partyName+' / '+caseNumber+'）\n\n擬發給當事人的訊息：\n「'+newDraft+'」\n\n👉 回覆「送出」可複製訊息\n👉 回覆「改 [修改內容]」可再調整';
+  replyToLine_(replyToken,reviewText,CONFIG);
+}
+
+// Claude 改稿（使用 Sonnet 4.6，與主流程一致）
+function redraftMessage_(originalDraft,instruction,config){
+  try{
+    var payload={
+      model:'claude-sonnet-4-6',
+      max_tokens:800,
+      messages:[{
+        role:'user',
+        content:'以下是原本擬好的律師事務所訊息：\n\n「'+originalDraft+'」\n\n請根據以下指示修改：'+instruction+'\n\n直接輸出修改後的訊息，不加任何說明或前言。'
+      }]
+    };
+    var response=UrlFetchApp.fetch('https://api.anthropic.com/v1/messages',{
+      method:'post',
+      contentType:'application/json',
+      headers:{'x-api-key':config.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},
+      payload:JSON.stringify(payload),
+      muteHttpExceptions:true
+    });
+    if(response.getResponseCode()!==200){
+      Logger.log('redraftMessage_ fail: '+response.getResponseCode());
+      return null;
+    }
+    var result=JSON.parse(response.getContentText());
+    var textBlocks=(result.content||[]).filter(function(b){return b.type==='text';});
+    if(textBlocks.length===0)return null;
+    return textBlocks[0].text.trim();
+  }catch(err){
+    Logger.log('redraftMessage_ error: '+err.message);
+    return null;
+  }
+}
+
+// 測試：模擬收發文流程（不實際下載 LINE 檔案）
+function testClassifyDocument(){
+  var CONFIG=getConfig_();
+  // 用一個最小合法 PDF 的 base64 做測試（1頁空白）
+  var minPdfBase64='JVBERi0xLjAKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqIDIgMCBvYmo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iaiAzIDAgb2JqPDwvVHlwZS9QYWdlL01lZGlhQm94WzAgMCAzIDNdPj5lbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAp0cmFpbGVyPDwvU2l6ZSA0L1Jvb3QgMSAwIFI+PgpzdGFydHhyZWYKMTkwCiUlRU9G';
+  var result=classifyDocument_(minPdfBase64,CONFIG);
+  Logger.log('classifyDocument_ result: '+JSON.stringify(result));
 }
