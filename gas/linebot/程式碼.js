@@ -588,8 +588,8 @@ function handleFileMessage_(event){
   // 4. Claude 辨識文件
   var classifyResult=classifyDocument_(fileBase64,CONFIG);
 
-  // 5. 擬訊息
-  var draftMessage=draftForwardMessage_(classifyResult,driveFileUrl);
+  // 5. 擬訊息（Claude 動態生成）
+  var draftMessage=draftForwardMessageClaude_(classifyResult,CONFIG);
 
   // 6. 推審核給律師
   pushReviewToLawyer_(classifyResult,draftMessage,driveFileUrl,CONFIG);
@@ -692,8 +692,8 @@ function classifyDocument_(fileBase64,config){
   }
 }
 
-// 根據文件類別擬當事人通知訊息
-function draftForwardMessage_(classifyResult,driveFileUrl){
+// 用 Claude 動態生成當事人通知訊息（取代固定模板）
+function draftForwardMessageClaude_(classifyResult,config){
   var category=classifyResult.category||'其他';
   var partyName=classifyResult.partyName||'';
   var caseNumber=classifyResult.caseNumber||'（案號未辨識）';
@@ -701,38 +701,69 @@ function draftForwardMessage_(classifyResult,driveFileUrl){
   var keyDates=classifyResult.keyDates||'';
   var summary=classifyResult.summary||'';
 
-  // 稱呼：取姓（第一個字）+ 先生/小姐佔位
-  var salutation=partyName?partyName.charAt(0)+'先生/小姐，您好：':'您好：';
+  try{
+    var prompt='你是王志文律師事務所的助理，幫律師擬一則通知當事人的 LINE 訊息。\n\n';
+    prompt+='## 王律師的發文風格（必須遵守）\n';
+    prompt+='- 稱呼：取當事人姓氏第一個字 + 先生/小姐；無法判斷就用「您好」\n';
+    prompt+='- 語氣正式但有溫度，像真人在打字，不用罐頭化語句\n';
+    prompt+='- 直接告知重點，不繞圈子，不說廢話\n';
+    prompt+='- 有期限的文件（開庭、上訴、答辯），一定明確點出日期並加提醒，讓當事人感受到緊迫性\n';
+    prompt+='- 判決書必須說明上訴期限（通常 20 天），提醒逾期不可救\n';
+    prompt+='- 全程用「您」，不用「你」或「妳」\n';
+    prompt+='- 結尾署名：王志文律師 敬上\n';
+    prompt+='- 長度：100-180 字，精準不冗長\n\n';
+    prompt+='## 文件資訊\n';
+    prompt+='- 文件類別：'+category+'\n';
+    prompt+='- 案號：'+caseNumber+'\n';
+    prompt+='- 當事人：'+(partyName||'（未辨識）')+'\n';
+    prompt+='- 機關/法院：'+(court||'（未辨識）')+'\n';
+    prompt+='- 關鍵日期：'+(keyDates||'無')+'\n';
+    prompt+='- 文件重點：'+(summary||'（無）')+'\n\n';
+    prompt+='直接輸出可傳給當事人的 LINE 訊息全文，不加任何說明或前言。';
 
-  var msg='';
-  if(category==='開庭通知'){
-    msg=salutation+'\n\n您的案件（'+caseNumber+'）已收到'+court+'開庭通知。\n\n';
-    if(keyDates)msg+='庭期：'+keyDates+'\n\n';
-    msg+='請務必準時到庭，如有任何問題或需要協助準備，請提前與事務所聯繫。\n\n王志文律師敬上';
-  }else if(category==='判決書'){
-    msg=salutation+'\n\n您的案件（'+caseNumber+'）已收到'+court+'判決書。\n\n';
-    if(summary)msg+='判決重點：'+summary+'\n\n';
-    if(keyDates)msg+='重要期限：'+keyDates+'（請注意上訴期限，逾期不可上訴）\n\n';
-    msg+='如需進一步說明或討論後續，請與事務所聯繫。\n\n王志文律師敬上';
-  }else if(category==='裁定'){
-    msg=salutation+'\n\n您的案件（'+caseNumber+'）已收到'+court+'裁定。\n\n';
-    if(summary)msg+='裁定內容：'+summary+'\n\n';
-    if(keyDates)msg+='相關期限：'+keyDates+'\n\n';
-    msg+='後續動作請與事務所確認。\n\n王志文律師敬上';
-  }else if(category==='傳票'){
-    msg=salutation+'\n\n您收到'+court+'傳票，案號：'+caseNumber+'。\n\n';
-    if(keyDates)msg+='出庭日期：'+keyDates+'\n\n';
-    msg+='請攜帶身分證件準時到庭，如有任何疑問，請提前與事務所聯繫。\n\n王志文律師敬上';
-  }else{
-    msg=salutation+'\n\n您有一份來自'+(court||'相關機關')+'的文件，案號：'+caseNumber+'。\n\n';
-    if(summary)msg+='文件說明：'+summary+'\n\n';
-    if(keyDates)msg+='相關日期：'+keyDates+'\n\n';
-    msg+='如有任何問題，歡迎與事務所聯繫。\n\n王志文律師敬上';
+    var payload={
+      model:'claude-sonnet-4-6',
+      max_tokens:600,
+      messages:[{role:'user',content:prompt}]
+    };
+    var response=UrlFetchApp.fetch('https://api.anthropic.com/v1/messages',{
+      method:'post',
+      contentType:'application/json',
+      headers:{'x-api-key':config.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},
+      payload:JSON.stringify(payload),
+      muteHttpExceptions:true
+    });
+    if(response.getResponseCode()!==200){
+      Logger.log('draftForwardMessageClaude_ fail: '+response.getResponseCode());
+      return draftForwardMessageFallback_(classifyResult);
+    }
+    var result=JSON.parse(response.getContentText());
+    var textBlocks=(result.content||[]).filter(function(b){return b.type==='text';});
+    if(textBlocks.length===0)return draftForwardMessageFallback_(classifyResult);
+    return textBlocks[0].text.trim();
+  }catch(err){
+    Logger.log('draftForwardMessageClaude_ error: '+err.message);
+    return draftForwardMessageFallback_(classifyResult);
   }
+}
+
+// fallback：Claude 失敗時用的基本模板
+function draftForwardMessageFallback_(classifyResult){
+  var partyName=classifyResult.partyName||'';
+  var caseNumber=classifyResult.caseNumber||'（案號未辨識）';
+  var court=classifyResult.court||'相關機關';
+  var keyDates=classifyResult.keyDates||'';
+  var summary=classifyResult.summary||'';
+  var salutation=partyName?partyName.charAt(0)+'先生/小姐，您好：':'您好：';
+  var msg=salutation+'\n\n您的案件（'+caseNumber+'）有新文件來自'+court+'。\n\n';
+  if(summary)msg+='文件說明：'+summary+'\n\n';
+  if(keyDates)msg+='相關日期：'+keyDates+'\n\n';
+  msg+='如有任何問題，歡迎與事務所聯繫。\n\n王志文律師 敬上';
   return msg;
 }
 
 // 推審核訊息給律師，並暫存草稿（CacheService，6小時）
+// 泡泡一：摘要；泡泡二：草稿全文（獨立泡泡方便複製）
 function pushReviewToLawyer_(classifyResult,draftMessage,driveFileUrl,config){
   // 暫存供「送出」/「改 xxx」指令使用
   var cache=CacheService.getScriptCache();
@@ -749,9 +780,12 @@ function pushReviewToLawyer_(classifyResult,draftMessage,driveFileUrl,config){
   var court=classifyResult.court||'（未辨識）';
   var keyDates=classifyResult.keyDates||'無';
 
-  var reviewText='📄 收發文處理完成\n案件：'+partyName+'（'+caseNumber+'）\n文件：'+category+'\n法院：'+court+'\n關鍵日期：'+keyDates+'\n已存：'+(driveFileUrl||'（上傳失敗）')+'\n\n擬發給當事人的訊息：\n「'+draftMessage+'」\n\n👉 回覆「送出」可複製訊息\n👉 回覆「改 [修改內容]」可調整';
+  // 泡泡一：案件摘要 + 操作說明
+  var summaryText='📄 收發文處理完成\n案件：'+partyName+'（'+caseNumber+'）\n文件：'+category+'\n法院：'+court+'\n關鍵日期：'+keyDates+'\n已存：'+(driveFileUrl||'（上傳失敗）')+'\n\n👉 回覆「送出」→ 取得可複製訊息\n👉 回覆「改 [指示]」→ Claude 重新擬稿';
+  pushToLawyer_(summaryText,config);
 
-  pushToLawyer_(reviewText,config);
+  // 泡泡二：草稿全文（獨立泡泡，方便直接閱讀與確認）
+  pushToLawyer_(draftMessage,config);
 }
 
 // 律師回覆「送出」→ 回傳可複製的訊息全文
@@ -836,6 +870,20 @@ function listAllProps_(){
 }
 function listAllProps(){
   return listAllProps_();
+}
+
+// 測試：Drive 上傳權限（觸發 Drive OAuth 授權）
+function testDriveUpload(){
+  try{
+    var folder=DriveApp.getFolderById('1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b');
+    Logger.log('✅ Drive 資料夾 OK：'+folder.getName());
+    var testFile=folder.createFile('test_drive_auth_ok.txt','Drive 授權測試成功，可刪除此檔。');
+    Logger.log('✅ 測試檔案上傳 OK：'+testFile.getUrl());
+    testFile.setTrashed(true);
+    Logger.log('✅ 測試檔案已清除');
+  }catch(err){
+    Logger.log('❌ 錯誤：'+err.message);
+  }
 }
 
 // 測試：模擬收發文流程（不實際下載 LINE 檔案）
