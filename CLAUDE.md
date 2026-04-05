@@ -44,9 +44,17 @@ commit message 格式：
 
 ## clasp (GAS 自動部署) — 2026-04-05 新增
 
-- clasp 3.3.0 已安裝，GAS 專案已 clone 到 ~/lawyer-scripts/gas/morning-briefing/
+### 晨報系統（@509ltqig，內部晨報）
+- 路徑：~/lawyer-scripts/gas/morning-briefing/
 - Script ID: 1MhSRWa4r5n2kGp6fTjSa7MGtkAenF7oBfatK4eRGSbzn8iodGNT0a4aX
 - 檔案：程式碼.js（主檔 v2.30）、court-hearing-notify.js（v1.8）、daily-task-dispatch.js（陳律 v1.4）、business-card-reminder.js（v1.0）
+
+### Linebot 自動回覆（@628xgdmn，對外 OA）
+- 路徑：~/lawyer-scripts/gas/linebot/
+- Claude API 自動回覆 v2.2，含 BLOCKED_USER_IDS 黑名單
+
+### 共用規則
+- clasp 3.3.0 已安裝
 - **修改流程**：clasp pull → 修改 → diff 確認 → clasp push → clasp pull 驗證 → git commit
 - **安全規則**：push 前必須 diff；push 失敗從 git 恢復；每次 push 後自動 git commit
 
