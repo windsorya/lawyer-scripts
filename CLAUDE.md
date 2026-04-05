@@ -75,7 +75,7 @@ claude.ai 確認同步後會將 ⏳ 改為 ✅。
 連結用英文短語避免 URL encoding 亂碼，訊息本文用中文說明：
 
 ```bash
-cd ~/lawyer-scripts/gas/morning-briefing && clasp run diagLinePush --params '["🔔 CC完成：[中文簡述變更內容]\n\n👉 點此同步Claude：\nhttps://claude.ai/new?q=CC+changelog+sync"]'
+cd ~/lawyer-scripts/gas/morning-briefing && clasp run sendLineMessage --params '["🔔 CC完成：[中文簡述變更內容]\n\n👉 點此同步Claude：\nhttps://claude.ai/new?q=CC+changelog+sync"]'
 ```
 
 律師點連結 → claude.ai 開新對話 → claude.ai 看到 "CC changelog sync" 自動讀 CHANGELOG 並同步 Memory。
