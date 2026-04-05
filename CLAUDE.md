@@ -72,19 +72,13 @@ claude.ai 確認同步後會將 ⏳ 改為 ✅。
 
 ### 重大變更通知律師（強制）
 完成重大變更後，除了寫 CHANGELOG，推 LINE 通知律師。
-訊息必須包含 claude.ai/new?q= 連結，律師點一下就自動開新對話帶入提示語，零打字：
+連結用英文短語避免 URL encoding 亂碼，訊息本文用中文說明：
 
 ```bash
-# URL encode 提示語
-PROMPT="CC已完成[具體變更]，請更新Memory。"
-ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PROMPT}'))")
-MSG="🔔 CC完成：[簡述]
-
-👉 點此同步Claude：
-https://claude.ai/new?q=${ENCODED}"
-
-cd ~/lawyer-scripts/gas/morning-briefing && clasp run diagLinePush --params "[\"${MSG}\"]"
+cd ~/lawyer-scripts/gas/morning-briefing && clasp run diagLinePush --params '["🔔 CC完成：[中文簡述變更內容]\n\n👉 點此同步Claude：\nhttps://claude.ai/new?q=CC+changelog+sync"]'
 ```
+
+律師點連結 → claude.ai 開新對話 → claude.ai 看到 "CC changelog sync" 自動讀 CHANGELOG 並同步 Memory。
 
 ### CC prompt 複雜度控制
 - CC 對複雜多步驟 prompt 不穩定，超過 3 個主要步驟必須拆成多次呼叫
