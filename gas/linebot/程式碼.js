@@ -81,7 +81,7 @@ function processMessageEvent_(event){
   // ── 紅旗偵測 ──
   var redFlagResult=detectRedFlag_(messageText);
   if(redFlagResult.isRedFlag){
-    var alertText='🚨 高風險當事人攔截\n\n👤 '+displayName+'\n🕐 '+formatTimestamp_(timestamp)+'\n📝 原始訊息：\n'+truncate_(messageText,200)+'\n\n───────────\n⚠️ 紅旗指標：\n'+redFlagResult.flags.join('\n')+'\n\n💡 建議先評估再回覆。';
+    var alertText='🚨 高風險當事人攔截\n\n👤 '+displayName+'\n🔑 '+userId+'\n🕐 '+formatTimestamp_(timestamp)+'\n📝 原始訊息：\n'+truncate_(messageText,200)+'\n\n───────────\n⚠️ 紅旗指標：\n'+redFlagResult.flags.join('\n')+'\n\n💡 建議先評估再回覆。';
     pushToLawyer_(alertText,CONFIG);
     writeToNotion_({displayName:displayName,userId:userId,messageText:messageText,caseType:'待判斷',replyMode:'紅旗攔截',claudeReply:'',status:'紅旗待審核',timestamp:timestamp},CONFIG);
     return;
@@ -109,7 +109,7 @@ function processMessageEvent_(event){
     // 2. Push 備查給律師（統一格式）
     var isWH=isWorkHours_();
     var timeLabel=isWH?'工時':'非工時';
-    var lawyerText='📨 LINE 諮詢（已自動回覆・'+timeLabel+'）\n\n👤 '+displayName+(history?' 🔄 回頭客':'')+'\n🕐 '+formatTimestamp_(timestamp)+'\n💡 '+caseType+'\n\n📝 民眾：\n'+truncate_(mergedMessage,300)+'\n\n───────────\n🤖 已回覆：\n'+truncate_(claudeResponse,300)+'\n───────────\n\n▶ 如需補充回覆，請至 LINE OA 後台';
+    var lawyerText='📨 LINE 諮詢（已自動回覆・'+timeLabel+'）\n\n👤 '+displayName+(history?' 🔄 回頭客':'')+'\n🔑 '+userId+'\n🕐 '+formatTimestamp_(timestamp)+'\n💡 '+caseType+'\n\n📝 民眾：\n'+truncate_(mergedMessage,300)+'\n\n───────────\n🤖 已回覆：\n'+truncate_(claudeResponse,300)+'\n───────────\n\n▶ 如需補充回覆，請至 LINE OA 後台';
     pushToLawyer_(lawyerText,CONFIG);
 
     // 3. 寫入 Notion
@@ -118,7 +118,7 @@ function processMessageEvent_(event){
     // Claude API 失敗 → fallback
     var fallback=getFallbackMessage_();
     replyToLine_(replyToken,fallback,CONFIG);
-    pushToLawyer_('⚠️ Claude API 失敗，已送 fallback\n👤 '+displayName+'\n📝 '+truncate_(mergedMessage,100),CONFIG);
+    pushToLawyer_('⚠️ Claude API 失敗，已送 fallback\n👤 '+displayName+'\n🔑 '+userId+'\n📝 '+truncate_(mergedMessage,100),CONFIG);
     writeToNotion_({displayName:displayName,userId:userId,messageText:mergedMessage,caseType:caseType,replyMode:'fallback',claudeReply:fallback,status:'已自動回覆(fallback)',timestamp:timestamp},CONFIG);
   }
 }
@@ -481,6 +481,11 @@ function listBlockedUsers(){
   try{list=JSON.parse(raw);}catch(e){Logger.log('解析失敗：'+raw);return;}
   if(list.length===0){Logger.log('黑名單為空');}
   else{Logger.log('共'+list.length+'筆封鎖：\n'+list.join('\n'));}
+}
+
+function testBlock(){
+  blockUser('Ud97020e3f9e57d935ae969fac8dee306');
+  listBlockedUsers();
 }
 
 function issueNewToken(){
