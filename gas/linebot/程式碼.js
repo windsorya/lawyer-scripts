@@ -1,8 +1,9 @@
-// LINE Bot v2.4 - 收發文自動化 + 全時段自動回覆 + 統一 Push 備查
+// LINE Bot v2.5 - 收發文自動化 + 全時段自動回覆 + 統一 Push 備查
 // v2.0→v2.1: isDuplicate 改為只擋同用戶同內容重複訊息，不擋連續不同訊息
 // v2.1→v2.2: 黑名單過濾垃圾訊息 + 備查顯示 userId
 // v2.2→v2.3: 律師 LINE 指令封鎖垃圾用戶（封鎖+名字 → 查 Notion → blockUser）
 // v2.3→v2.4: 收發文自動化（file message → Drive 上傳 + Claude 辨識 + 擬稿 + 律師審核）
+// v2.4→v2.5: 收發文 bug fix（律師限定）+ Claude 動態擬稿 + 草稿獨立泡泡
 // 2026-04-06
 
 // ⚠️ 不要跑 setupAllProperties — Script Properties 已手動設定好
