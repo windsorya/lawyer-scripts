@@ -4,9 +4,9 @@
 //       案件待辦到期、時效預警、家庭行程、身心狀態至 LINE（透過 Messaging API）
 // 作者：Claude for William
 // 日期：2026-04-04
-// 變更：v2.30 - readHealthSheet_ 改為用 folder ID 精準定位 wjv Drive 的
-//               daily-vitals 資料夾，不再用 DriveApp.searchFiles 全域搜尋。
-//               CONFIG 新增 HEALTH_DRIVE_FOLDER_ID，移除 HEALTH_DRIVE_FOLDER_NAME。
+// 變更：v2.31 - readHealthSheet_ 改架構：支援新日聚合檔（HealthMetrics-YYYY-MM-DD 單列）
+//               同名多檔時選 lastRow≤5 的日聚合；以最新列為準；月彙總檔為 fallback。
+//               getHealthStatus 簡化：僅讀今日，yesterday fallback，不再雙日合併。
 // ============================================================
 
 // ======================== 設定區 ========================
@@ -356,43 +356,136 @@ function getHealthStatus(today) {
   var fallback = { display: '尚無健康數據（Health Auto Export 尚未同步）\n', prompt: '充電' };
   try {
     var ts = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
-    var y = new Date(today); y.setDate(y.getDate()-1);
-    var ys = Utilities.formatDate(y, 'Asia/Taipei', 'yyyy-MM-dd');
-    var td = readHealthSheet_(ts), yd = readHealthSheet_(ys);
-    if (!td) { var db = new Date(today); db.setDate(db.getDate()-2); var dbs = Utilities.formatDate(db,'Asia/Taipei','yyyy-MM-dd'); var dbd = readHealthSheet_(dbs); if(!dbd) return fallback; return buildHealthDisplay_(dbd, yd||{}); }
-    return buildHealthDisplay_(td, yd||{});
+    var td = readHealthSheet_(ts);
+    if (!td) {
+      // Fallback: try yesterday
+      var y = new Date(today); y.setDate(y.getDate()-1);
+      var ys = Utilities.formatDate(y, 'Asia/Taipei', 'yyyy-MM-dd');
+      td = readHealthSheet_(ys);
+      if (!td) return fallback;
+    }
+    return buildHealthDisplay_(td, {});
   } catch (err) { Logger.log('讀取健康數據錯誤：' + err.message); return { display: '健康數據讀取失敗\n', prompt: '充電' }; }
 }
 
+// 讀取指定日期的健康指標。
+// 優先：日聚合檔 HealthMetrics-YYYY-MM-DD（單列，含全部指標）
+// Fallback：月彙總檔 HealthMetrics-YYYY-MM（找對應日期列）
 function readHealthSheet_(dateStr) {
-  var fn = 'HealthMetrics-' + dateStr;
-  var folder;
+  // Strategy 1: day-unit file HealthMetrics-YYYY-MM-DD
+  var dayFileId = findHealthFileId_('HealthMetrics-' + dateStr);
+  if (dayFileId) {
+    var data = extractLatestHealthRow_(dayFileId);
+    if (data) return data;
+  }
+  // Strategy 2: monthly aggregate file HealthMetrics-YYYY-MM
+  var ym = dateStr.substring(0, 7);
+  var monthFileId = findHealthFileId_('HealthMetrics-' + ym);
+  if (monthFileId) {
+    var mdata = extractMonthlyHealthRow_(monthFileId, dateStr);
+    if (mdata) return mdata;
+  }
+  return null;
+}
+
+// 搜尋 Drive 找到指定名稱的 Spreadsheet，快取 file ID。
+// 若有多個同名檔（舊逐分鐘 + 新日聚合），選 lastRow ≤ 5 的（日聚合）。
+function findHealthFileId_(filename) {
+  var cacheKey = 'HEALTH_F_' + filename;
   try {
-    folder = DriveApp.getFolderById(CONFIG.HEALTH_DRIVE_FOLDER_ID);
-  } catch (e) {
-    Logger.log('無法存取 daily-vitals 資料夾：' + e.message);
-    return null;
-  }
-  var files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
-  var latest = null, latestTime = 0;
-  while (files.hasNext()) {
-    var f = files.next();
-    if (f.getName().indexOf(fn) === -1) continue;
-    var t = f.getLastUpdated().getTime();
-    if (t > latestTime) { latest = f; latestTime = t; }
-  }
-  if (!latest) return null;
-  var sh = SpreadsheetApp.open(latest).getActiveSheet();
-  var h = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
-  var d = sh.getRange(2,1,1,sh.getLastColumn()).getValues()[0];
-  var r = {}; h.forEach(function(x,i){ r[x.toString().trim()] = d[i]; }); return r;
+    var cached = PropertiesService.getScriptProperties().getProperty(cacheKey);
+    if (cached) return cached;
+  } catch(e) {}
+  try {
+    var token = ScriptApp.getOAuthToken();
+    var q = encodeURIComponent("name = '" + filename + "' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false");
+    var url = 'https://www.googleapis.com/drive/v3/files?q=' + q + '&pageSize=5&fields=files(id,name)';
+    var resp = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) return null;
+    var files = JSON.parse(resp.getContentText()).files;
+    if (!files || files.length === 0) return null;
+    var chosen = files[0].id;
+    if (files.length > 1) {
+      // Multiple files: pick the daily aggregate (fewest rows)
+      for (var i = 0; i < files.length; i++) {
+        try {
+          var sh = SpreadsheetApp.openById(files[i].id).getActiveSheet();
+          if (sh.getLastRow() <= 5) { chosen = files[i].id; break; }
+        } catch(e) {}
+      }
+    }
+    PropertiesService.getScriptProperties().setProperty(cacheKey, chosen);
+    return chosen;
+  } catch(e) { Logger.log('findHealthFileId_ 失敗：' + e.message); }
+  return null;
+}
+
+// 讀日聚合檔（新格式：單列）或逐分鐘檔（舊格式：多列）最新一列資料。
+// 逐分鐘檔時，同時補 row 2 的字段（midnight aggregate）。
+function extractLatestHealthRow_(fileId) {
+  try {
+    var sh = SpreadsheetApp.openById(fileId).getActiveSheet();
+    var ncols = sh.getLastColumn();
+    var nrows = sh.getLastRow();
+    if (nrows < 2) return null;
+    var h = sh.getRange(1, 1, 1, ncols).getValues()[0];
+    // Read the latest row (last row with data)
+    var latestRow = sh.getRange(nrows, 1, 1, ncols).getValues()[0];
+    var r = {};
+    h.forEach(function(x, i) {
+      var k = x.toString().trim(); var v = latestRow[i];
+      if (k && v !== '' && v !== null && v !== undefined) r[k] = v;
+    });
+    // For per-minute files: also merge row 2 to fill in any aggregate fields (e.g. sleep at midnight)
+    if (nrows > 5) {
+      var row2 = sh.getRange(2, 1, 1, ncols).getValues()[0];
+      h.forEach(function(x, i) {
+        var k = x.toString().trim(); var v = row2[i];
+        if (k && !r.hasOwnProperty(k) && v !== '' && v !== null && v !== undefined) r[k] = v;
+      });
+    }
+    return Object.keys(r).length > 1 ? r : null;
+  } catch(e) { Logger.log('extractLatestHealthRow_ 失敗：' + e.message); return null; }
+}
+
+// 月彙總檔：找到 dateStr 對應的列並回傳資料。
+function extractMonthlyHealthRow_(fileId, dateStr) {
+  try {
+    var sh = SpreadsheetApp.openById(fileId).getActiveSheet();
+    var ncols = sh.getLastColumn();
+    var nrows = sh.getLastRow();
+    if (nrows < 2) return null;
+    var h = sh.getRange(1, 1, 1, ncols).getValues()[0];
+    var aCol = sh.getRange(2, 1, nrows - 1, 1).getValues();
+    for (var i = 0; i < aCol.length; i++) {
+      var cell = aCol[i][0];
+      var cellStr = (cell instanceof Date) ? Utilities.formatDate(cell, 'Asia/Taipei', 'yyyy-MM-dd') : cell.toString();
+      if (cellStr.indexOf(dateStr) === 0) {
+        var row = sh.getRange(i + 2, 1, 1, ncols).getValues()[0];
+        var r = {};
+        h.forEach(function(x, ci) {
+          var k = x.toString().trim(); var v = row[ci];
+          if (k && v !== '' && v !== null && v !== undefined) r[k] = v;
+        });
+        return Object.keys(r).length > 1 ? r : null;
+      }
+    }
+  } catch(e) { Logger.log('extractMonthlyHealthRow_ 失敗：' + e.message); }
+  return null;
 }
 
 function buildHealthDisplay_(td, yd) {
   var pf = function(k,s){ var v=parseFloat(s[k]); return isNaN(v)?null:v; };
-  var st=pf('睡眠分析 [睡眠時間] (hr)',td)||pf('睡眠分析 [Total] (hr)',td), sr=pf('睡眠分析 [REM] (hr)',td), hv=pf('心率變異性 (毫秒)',td);
-  var rh=pf('靜止心率 (bpm)',td), bo=pf('血氧飽和度 (%)',td), br=pf('呼吸速率 (次/分)',td), sd=pf('睡眠分析 [深層] (hr)',td);
-  var steps=pf('步數 (步)',yd), exMin=pf('Apple 運動時間 (分鐘)',yd);
+  // Sleep is in yesterday's daily aggregate; fallback to yd when td is missing
+  var st=pf('睡眠分析 [睡眠時間] (hr)',td)||pf('睡眠分析 [Total] (hr)',td)||pf('睡眠分析 [睡眠時間] (hr)',yd)||pf('睡眠分析 [Total] (hr)',yd);
+  var sr=pf('睡眠分析 [REM] (hr)',td)||pf('睡眠分析 [REM] (hr)',yd);
+  var sd=pf('睡眠分析 [深層] (hr)',td)||pf('睡眠分析 [深層] (hr)',yd);
+  // HRV/HR from td (current day intraday), fallback to yd
+  var hv=pf('心率變異性 (毫秒)',td)||pf('心率變異性 (毫秒)',yd);
+  var rh=pf('靜止心率 (bpm)',td)||pf('靜止心率 (bpm)',yd);
+  var bo=pf('血氧飽和度 (%)',td)||pf('血氧飽和度 (%)',yd);
+  var br=pf('呼吸速率 (次/分)',td)||pf('呼吸速率 (次/分)',yd);
+  var steps=pf('步數 (步)',yd)||pf('步數 (步)',td), exMin=pf('Apple 運動時間 (分鐘)',yd)||pf('Apple 運動時間 (分鐘)',td);
   function ml(v,g,y){ if(v===null)return''; return v>=g?'🟢':v>=y?'🟡':'🔴'; }
   var status='🟢', stxt='狀態良好';
   if(st!==null){ if(st<5.5){status='🔴';stxt='睡眠嚴重不足';} else if(st<6.5&&status!=='🔴'){status='🟡';stxt='睡眠不足';} }
@@ -494,6 +587,12 @@ function sendLinePush_(mo) {
 }
 
 function sendLineMessage(text){sendLinePush_(buildTextMessages_(text));}
+
+function setScriptProperty(key, value) {
+  PropertiesService.getScriptProperties().setProperty(key, value);
+  return 'Set ' + key + ' (len=' + value.length + ')';
+}
+
 
 
 function sendLineReply_(rt,mo) {
