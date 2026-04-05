@@ -30,7 +30,7 @@ commit message 格式：
 整個過程不問律師。
 
 ---
-## 卷證筆錄摘取（Gemini 分批路線，v6）
+## 卷證筆錄摘取（Gemini 分批路線，v7）
 - 大型掃描 PDF（>44MB）的筆錄摘取，優先用 gemini_pdf_extract.py
 - 腳本位置：~/JudicialData/gemini_pdf_extract.py（244行，正式版）
 - 舊版 gemini_batch_extract.py 在 ~/lawyer-scripts/（v1，已被 v6 取代）
@@ -51,6 +51,7 @@ commit message 格式：
 
 ### Linebot 自動回覆（@628xgdmn，對外 OA）
 - 路徑：~/lawyer-scripts/gas/linebot/
+- Script ID: 1Yz8IjQ6NULorCr4E-nbPK1AFrC_k_cAdLIi2yWXFrr1RLW-M8BVscuct
 - Claude API 自動回覆 v2.2，含 BLOCKED_USER_IDS 黑名單
 
 ### 共用規則
