@@ -199,3 +199,22 @@ function sendFollowupLineMessage_(text) {
     Logger.log('LINE 推播錯誤：' + error.message);
   }
 }
+
+/**
+ * 自動安裝觸發器（由晨報主函數呼叫，或首次手動執行）
+ * 檢查 checkConsultationFollowups 的觸發器是否存在，不存在就建立
+ */
+function ensureConsultationFollowupTrigger_() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var exists = triggers.some(function(t) {
+    return t.getHandlerFunction() === 'checkConsultationFollowups';
+  });
+  if (!exists) {
+    ScriptApp.newTrigger('checkConsultationFollowups')
+      .timeBased()
+      .everyDays(1)
+      .atHour(8)
+      .create();
+    Logger.log('✅ 觸發器已自動建立：checkConsultationFollowups 每日 08:00-09:00');
+  }
+}

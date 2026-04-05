@@ -96,6 +96,7 @@ function truncateLabel_(text, maxLen) {
 // ======================== 主程式 ========================
 
 function sendMorningBriefing() {
+  try { ensureConsultationFollowupTrigger_(); } catch(e) { Logger.log('Trigger check failed: ' + e); }
   var today = new Date();
   var todayStr = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy/MM/dd (EEE)');
 
