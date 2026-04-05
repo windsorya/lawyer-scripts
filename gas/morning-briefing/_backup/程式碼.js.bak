@@ -495,7 +495,6 @@ function sendLinePush_(mo) {
 
 function sendLineMessage(text){sendLinePush_(buildTextMessages_(text));}
 
-
 function sendLineReply_(rt,mo) {
   try{UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply',{method:'post',headers:{'Content-Type':'application/json','Authorization':'Bearer '+CONFIG.LINE_CHANNEL_ACCESS_TOKEN},
     payload:JSON.stringify({replyToken:rt,messages:mo.slice(0,5)}),muteHttpExceptions:true});
@@ -544,3 +543,25 @@ function testNotionTodos() {
   Logger.log('Notion 待辦候選（'+ts.length+' 項）：');
   ts.forEach(function(t,i){Logger.log((i+1)+'. '+t.icon+' '+t.title+t.suffix);});
 }
+
+
+// === TEMP TRIGGER v7 ===
+function doGet(e) {
+  var action = e && e.parameter && e.parameter.action;
+  if (action === "listProps") {
+    try {
+      var props = PropertiesService.getScriptProperties().getProperties();
+      var keys = Object.keys(props);
+      var info = keys.map(function(k) { return k + "=" + (props[k] ? props[k].length : 0) + "chars"; });
+      return ContentService.createTextOutput("PROPS(" + keys.length + "): " + info.join(", "));
+    } catch(err) {
+      return ContentService.createTextOutput("ERR: " + err.message);
+    }
+  }
+  if (action === "sendBriefing") {
+    try { sendMorningBriefing(); return ContentService.createTextOutput("DONE"); }
+    catch(err) { return ContentService.createTextOutput("ERR: " + err.message); }
+  }
+  return ContentService.createTextOutput("ok");
+}
+// === END TEMP TRIGGER v7 ===

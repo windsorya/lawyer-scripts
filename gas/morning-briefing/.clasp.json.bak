@@ -1,6 +1,5 @@
 {
   "scriptId": "1MhSRWa4r5n2kGp6fTjSa7MGtkAenF7oBfatK4eRGSbzn8iodGNT0a4aX",
-  "deploymentId": "AKfycbwKmbZb9cjf5O3t4k1uZN9973YwGAeTflMRYq9_IiaA59kOZO1pdjkXelNLYcJYYabu_g",
   "rootDir": "",
   "scriptExtensions": [
     ".js",
@@ -13,6 +12,5 @@
     ".json"
   ],
   "filePushOrder": [],
-  "skipSubdirectories": false,
-  "projectId": "gen-lang-client-0481420713"
+  "skipSubdirectories": false
 }
