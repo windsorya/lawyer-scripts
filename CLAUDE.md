@@ -49,3 +49,13 @@ commit message 格式：
 - 檔案：程式碼.js（主檔 v2.30）、court-hearing-notify.js（v1.8）、daily-task-dispatch.js（陳律 v1.4）、business-card-reminder.js（v1.0）
 - **修改流程**：clasp pull → 修改 → diff 確認 → clasp push → clasp pull 驗證 → git commit
 - **安全規則**：push 前必須 diff；push 失敗從 git 恢復；每次 push 後自動 git commit
+
+### CC prompt 複雜度控制
+- CC 對複雜多步驟 prompt 不穩定，超過 3 個主要步驟必須拆成多次呼叫
+- CC 報 failed 不代表全部失敗——先檢查哪些步驟已完成，從斷點繼續
+
+### consultation-followup-notify v1.0（2026-04-05）
+- 每日 08:00-09:00 掃描 Notion 諮詢追蹤 DB（7bbc6a828c1f42ef90a03b65a1ff6ba3）
+- 過濾：下次追蹤日=今天 AND 狀態 NOT IN (已委任, 未委任結案)
+- 推播 LINE：姓名、案件類型、狀態、下一步、距上次互動天數、Notion連結
+- 觸發器自我安裝：ensureConsultationFollowupTrigger_() 由 sendMorningBriefing() 自動呼叫
