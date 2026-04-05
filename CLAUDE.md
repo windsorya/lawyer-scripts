@@ -72,13 +72,18 @@ claude.ai 確認同步後會將 ⏳ 改為 ✅。
 
 ### 重大變更通知律師（強制）
 完成重大變更後，除了寫 CHANGELOG，推 LINE 通知律師。
-連結用英文短語避免 URL encoding 亂碼，訊息本文用中文說明：
+訊息格式：本文用中文詳述變更內容（律師看LINE就知道改了什麼），連結用英文短語（避免亂碼）：
 
 ```bash
-cd ~/lawyer-scripts/gas/morning-briefing && clasp run sendLineMessage --params '["🔔 CC完成：[中文簡述變更內容]\n\n👉 點此同步Claude：\nhttps://claude.ai/new?q=CC+changelog+sync"]'
+cd ~/lawyer-scripts/gas/morning-briefing && clasp run sendLineMessage --params '["🔔 CC完成：[簡述]\n📋 變更內容：[具體改了什麼、影響什麼、律師需要知道什麼]\n\n👉 點此同步Claude：\nhttps://claude.ai/new?q=CC+changelog+sync"]'
 ```
 
-律師點連結 → claude.ai 開新對話 → claude.ai 看到 "CC changelog sync" 自動讀 CHANGELOG 並同步 Memory。
+範例：
+```bash
+clasp run sendLineMessage --params '["🔔 CC完成：clasp run 可遠端觸發 GAS\n📋 變更內容：修復三個問題（GCP綁定+scope重授權+setScriptProperty）。現在可以直接用 clasp run sendMorningBriefing 遠端觸發晨報推播，不需要再去 GAS 後台手動執行。\n\n👉 點此同步Claude：\nhttps://claude.ai/new?q=CC+changelog+sync"]'
+```
+
+律師看 LINE 就知道改了什麼 → 點連結 → claude.ai 自動讀 CHANGELOG 同步 Memory。
 
 ### CC prompt 複雜度控制
 - CC 對複雜多步驟 prompt 不穩定，超過 3 個主要步驟必須拆成多次呼叫
