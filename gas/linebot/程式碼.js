@@ -1,6 +1,7 @@
-// LINE Bot v2.1 - 全時段自動回覆 + 統一 Push 備查
+// LINE Bot v2.2 - 全時段自動回覆 + 統一 Push 備查
 // v2.0→v2.1: isDuplicate 改為只擋同用戶同內容重複訊息，不擋連續不同訊息
-// 2026-04-02
+// v2.1→v2.2: 黑名單過濾垃圾訊息 + 備查顯示 userId
+// 2026-04-05
 
 // ⚠️ 不要跑 setupAllProperties — Script Properties 已手動設定好
 // 此函式僅用於檢查目前的 properties 是否齊全
@@ -502,4 +503,9 @@ function issueNewToken(){
     PropertiesService.getScriptProperties().setProperty('LINE_CHANNEL_ACCESS_TOKEN',token);
     Logger.log('✅ Token 已更新，長度：'+token.length);
   }
+}
+
+function setupBlockList_() {
+  PropertiesService.getScriptProperties().setProperty('BLOCKED_USER_IDS', JSON.stringify(["Ud97020e3f9e57d935ae969fac8dee306"]));
+  Logger.log('BLOCKED_USER_IDS 已設定: ' + PropertiesService.getScriptProperties().getProperty('BLOCKED_USER_IDS'));
 }
