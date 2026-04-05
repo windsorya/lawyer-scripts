@@ -234,14 +234,29 @@ def _ensure_genai():
 
 def upload_file(path: str, mime_type: str, display_name: str):
     """用 client.files.upload 上傳檔案，回傳 File 物件"""
+    import re
+    import shutil
+    import tempfile
     client = _ensure_genai()
     size_mb = os.path.getsize(path) / 1024 / 1024
     print(f"  上傳中：{os.path.basename(path)}（{size_mb:.1f}MB）...", flush=True)
     t0 = time.time()
-    file_obj = client.files.upload(
-        file=path,
-        config=genai_types.UploadFileConfig(mime_type=mime_type, display_name=display_name),
-    )
+    # genai library 從 path basename 取檔名放進 httpx multipart header，
+    # HTTP header 只允許 ASCII，中文路徑會炸。用暫存路徑（純 ASCII）繞過。
+    safe_name = re.sub(r'[^\x00-\x7F]+', '_', display_name)
+    ext = os.path.splitext(path)[1].lower()
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, prefix='gemini_up_', delete=False) as tmp:
+            tmp_path = tmp.name
+        shutil.copy2(path, tmp_path)
+        file_obj = client.files.upload(
+            file=tmp_path,
+            config=genai_types.UploadFileConfig(mime_type=mime_type, display_name=safe_name),
+        )
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
     print(f"  上傳完成（{time.time()-t0:.0f}s），等待 Gemini 處理...", flush=True)
     return file_obj
 
@@ -552,7 +567,7 @@ Prompt 類型對應：
     print(f"  總字元數：{len(full_text):,}", flush=True)
 
     if args.local_only:
-        out_path = os.path.join(os.getcwd(), f"{args.doc_name}.md")
+        out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{args.doc_name}.md")
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(full_text)
         print(f"\n  ✓ 已存 Markdown：{out_path}")
