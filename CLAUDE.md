@@ -67,3 +67,15 @@ commit message 格式：
 - 過濾：下次追蹤日=今天 AND 狀態 NOT IN (已委任, 未委任結案)
 - 推播 LINE：姓名、案件類型、狀態、下一步、距上次互動天數、Notion連結
 - 觸發器自我安裝：ensureConsultationFollowupTrigger_() 由 sendMorningBriefing() 自動呼叫
+
+### DevVault 同步規則（2026-04-05 確立）
+- DevVault 路徑：~/Library/Mobile Documents/iCloud~md~obsidian/Documents/DevVault/devlog/
+- CC 開發 session 結束時，devlog 的關鍵技術經驗由 claude.ai 同步到 Notion 外接硬碟
+- claude.ai 需要 DevVault 內容時，透過 CC:query cat 讀取
+- 同步方向：DevVault → Notion（單向），不需要 Notion → DevVault
+
+### 已知 bug/限制
+- daily_sync.py 有 bug（API URL 錯誤），下載用 pipeline_all.py
+- pdfplumber 大量頁面極慢，用 PyMuPDF (fitz) 替代
+- Google Drive FUSE 掛載不穩定（ls 就 deadlock），用 Drive API 操作
+- Gemini 中文路徑：shutil.copy2 到 tempfile + display_name ASCII 化
