@@ -68,16 +68,12 @@ commit message 格式：
 - 推播 LINE：姓名、案件類型、狀態、下一步、距上次互動天數、Notion連結
 - 觸發器自我安裝：ensureConsultationFollowupTrigger_() 由 sendMorningBriefing() 自動呼叫
 
-### DevVault 同步規則（2026-04-05 確立）
-- DevVault 路徑：~/Library/Mobile Documents/iCloud~md~obsidian/Documents/DevVault/devlog/
-- CC 開發 session 結束時，devlog 的關鍵技術經驗由 claude.ai 同步到 Notion 外接硬碟
-- claude.ai 需要 DevVault 內容時，透過 CC:query cat 讀取
-- 同步方向：DevVault → Notion（單向），不需要 Notion → DevVault
-
-### DevVault ↔ Notion 同步
-- DevVault devlog 路徑: ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/DevVault/devlog/
-- claude.ai 會透過 CC 讀取 DevVault devlog，關鍵技術經驗同步到 Notion 外接硬碟
-- CC 開發任務完成後，devlog 寫入 DevVault 的同時，claude.ai 負責同步到 Notion
+### DevVault 定位（2026-04-05 重新定位）
+- DevVault 是 CC 的本機筆記本（Obsidian），不同步到 Notion
+- CC 自己讀 DevVault 就好，claude.ai 不需要知道 CC 的內部開發細節
+- claude.ai 需要知道的只有「怎麼呼叫 CC」（版本、參數），這些在 CLAUDE.md 和 Notion 外接硬碟
+- CLAUDE.md 是唯一橋樑：claude.ai 透過 CC 讀/寫 CLAUDE.md，CC 啟動時讀 CLAUDE.md
+- 能力更新流程：CC 開發完成 → CC 寫 DevVault + 更新 CLAUDE.md → claude.ai 更新外接硬碟呼叫方式
 
 ### 已知 bug/限制
 - daily_sync.py 有 bug（API URL 錯誤），下載用 pipeline_all.py
