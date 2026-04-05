@@ -59,6 +59,17 @@ commit message 格式：
 - **修改流程**：clasp pull → 修改 → diff 確認 → clasp push → clasp pull 驗證 → git commit
 - **安全規則**：push 前必須 diff；push 失敗從 git 恢復；每次 push 後自動 git commit
 
+### CHANGELOG 寫入規則
+每次完成以下任一事項後，必須在底部 CHANGELOG 段落新增一行：
+- 新腳本部署或上線
+- 現有腳本版本升級
+- 新功能或新能力
+- 設定變更（Script ID、參數、路徑）
+- 重要 bug 修復
+
+格式：`- YYYY-MM-DD 描述（⏳待claude.ai同步）`
+claude.ai 確認同步後會將 ⏳ 改為 ✅。
+
 ### CC prompt 複雜度控制
 - CC 對複雜多步驟 prompt 不穩定，超過 3 個主要步驟必須拆成多次呼叫
 - CC 報 failed 不代表全部失敗——先檢查哪些步驟已完成，從斷點繼續
@@ -87,7 +98,7 @@ commit message 格式：
 claude.ai 涉及 CC 相關話題時，會讀取此段落確認有無未同步的更新。
 CC 完成重大變更後在此新增一行，claude.ai 同步到外接硬碟後標記 ✅。
 
-- 2026-04-05 clasp run 已可用：GCP綁定+scope重授權+setScriptProperty，可遠端觸發GAS函式（⏳待claude.ai同步）
+- 2026-04-05 clasp run 已可用：GCP綁定+scope重授權+setScriptProperty，可遠端觸發GAS函式（✅已同步）
 - 2026-04-05 consultation-followup-notify v1.0 部署（✅已同步）
 - 2026-04-05 clasp 安裝+login+clone（✅已同步）
 - 2026-04-05 gemini_pdf_extract v7 --drive-file-id（✅已同步）
