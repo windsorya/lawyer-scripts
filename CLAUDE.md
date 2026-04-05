@@ -39,7 +39,7 @@ commit message 格式：
 - 參數：MAX_BATCH_MB=23, OVERLAP_PAGES=2, max_workers=8, timeout=90s
 - 中文檔名處理：操作前先 cp 到 /tmp/英文名.ext 再處理
 - 產出格式：Google Doc（claude.ai 可用 readGoogleDoc 直接讀取）
-- 呼叫方式：python3 ~/JudicialData/gemini_pdf_extract.py --pdf /path/to/file.pdf --prompt-type 筆錄摘取 --case-folder-id <Drive folder ID> --doc-name "描述名" --max-workers 4
+- 呼叫方式（v7）：python3 ~/JudicialData/gemini_pdf_extract.py --drive-file-id <Drive file ID> --prompt-type 筆錄摘取 --case-folder-id <Drive folder ID> --doc-name "描述名"
 ---
 
 ## clasp (GAS 自動部署) — 2026-04-05 新增
@@ -73,6 +73,11 @@ commit message 格式：
 - CC 開發 session 結束時，devlog 的關鍵技術經驗由 claude.ai 同步到 Notion 外接硬碟
 - claude.ai 需要 DevVault 內容時，透過 CC:query cat 讀取
 - 同步方向：DevVault → Notion（單向），不需要 Notion → DevVault
+
+### DevVault ↔ Notion 同步
+- DevVault devlog 路徑: ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/DevVault/devlog/
+- claude.ai 會透過 CC 讀取 DevVault devlog，關鍵技術經驗同步到 Notion 外接硬碟
+- CC 開發任務完成後，devlog 寫入 DevVault 的同時，claude.ai 負責同步到 Notion
 
 ### 已知 bug/限制
 - daily_sync.py 有 bug（API URL 錯誤），下載用 pipeline_all.py
