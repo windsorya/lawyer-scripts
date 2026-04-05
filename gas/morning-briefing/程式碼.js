@@ -543,13 +543,4 @@ function testNotionTodos() {
   Logger.log('Notion 待辦候選（'+ts.length+' 項）：');
   ts.forEach(function(t,i){Logger.log((i+1)+'. '+t.icon+' '+t.title+t.suffix);});
 }
-// === TEMP TRIGGER (will be removed) ===
-function doGet(e) {
-  var action = e && e.parameter && e.parameter.action;
-  if (action === "sendBriefing") {
-    sendMorningBriefing();
-    return ContentService.createTextOutput("OK: briefing sent");
-  }
-  return ContentService.createTextOutput("no action");
-}
-// === END TEMP TRIGGER ===
+
