@@ -278,6 +278,7 @@ function getNotionTodoCandidates_(today) {
 
 function getTaiwanHolidayCalendar_() {
   var strategies = [
+    function() { return CalendarApp.getCalendarById('zh-tw.taiwan.official#holiday@group.v.calendar.google.com'); },
     function() { return CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com'); },
     function() { return CalendarApp.getCalendarById('en.taiwan#holiday@group.v.calendar.google.com'); },
     function() {
@@ -953,4 +954,12 @@ function testIsHolidayMode() {
   var events = cal ? cal.getEventsForDay(new Date()) : [];
   var titles = events.map(function(e) { return e.getTitle(); });
   return JSON.stringify({holidayMode: result, calExists: !!cal, events: titles, dayOfWeek: new Date().getDay()});
+}
+
+function listAllCalendars() {
+  var cals = CalendarApp.getAllCalendars();
+  var result = cals.map(function(c) {
+    return {name: c.getName(), id: c.getId()};
+  });
+  return JSON.stringify(result);
 }
