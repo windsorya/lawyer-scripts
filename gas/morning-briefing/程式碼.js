@@ -100,6 +100,7 @@ function sendMorningBriefing() {
   try { ensureAutoCourtPrepTrigger_(); } catch(e) { Logger.log('autoCourtPrep trigger: ' + e); }
   try {
   var today = new Date();
+  var holidayMode = isHolidayMode_();
   var todayStr = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy/MM/dd (EEE)');
 
   var lawyerAll = sortEvents(getLawyerDeadlineEvents(today));
@@ -142,7 +143,7 @@ function sendMorningBriefing() {
 
   var highlightEvents = sortEvents(getHighlightEvents(today));
   var highlightEmpty = (highlightEvents.length === 0);
-  message += '\n⭐️【Highlight任務】\n';
+  message += holidayMode ? '\n⭐️【今日亮點】\n' : '\n⭐️【Highlight任務】\n';
   if (highlightEmpty) { message += '⚠️ 今日尚未設定 Highlight，建議現在設定一個最重要的任務。\n'; }
   else { highlightEvents.forEach(function(e) { message += formatEvent(e); }); }
 
@@ -192,8 +193,14 @@ function sendMorningBriefing() {
 
   var lineMessages = buildTextMessages_(message);
 
-  var notionTodos = getNotionTodoCandidates_(today);
-  var hlCandidates = buildHighlightCandidates_(todayCourt, lawyerDeadlines, consultations, lawyerAdmin, notionAlerts.todos, notionTodos);
+  var hlCandidates;
+  if (holidayMode) {
+    var familyEvts = getFamilyEvents(today, todayCourt, lawyerAll);
+    hlCandidates = buildHolidayHighlightCandidates_(familyEvts);
+  } else {
+    var notionTodos = getNotionTodoCandidates_(today);
+    hlCandidates = buildHighlightCandidates_(todayCourt, lawyerDeadlines, consultations, lawyerAdmin, notionAlerts.todos, notionTodos);
+  }
   var flexMsg = buildHighlightFlexMessage_(highlightEmpty, hlCandidates);
   if (lineMessages.length < 5) lineMessages.push(flexMsg);
 
@@ -264,6 +271,40 @@ function getNotionTodoCandidates_(today) {
   return results.slice(0, 6);
 }
 
+// ======================== 假日模式判斷（v2.31） ========================
+
+function isHolidayMode_() {
+  var today = new Date();
+  var day = today.getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) {
+    // 週末但要排除補班日
+    try {
+      var cal = CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com');
+      if (cal) {
+        var events = cal.getEventsForDay(today);
+        for (var i = 0; i < events.length; i++) {
+          if (events[i].getTitle().indexOf('補行上班') >= 0) return false; // 補班日→工作模式
+        }
+      }
+    } catch(e) { Logger.log('假日日曆檢查錯誤：' + e.message); }
+    return true; // 一般週末→假日模式
+  }
+  // 非週末，檢查是否為國定假日
+  try {
+    var cal = CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com');
+    if (cal) {
+      var events = cal.getEventsForDay(today);
+      for (var i = 0; i < events.length; i++) {
+        var title = events[i].getTitle();
+        if (title.indexOf('補行上班') >= 0) return false;
+        // 有假日事件且不是補班→假日模式
+        return true;
+      }
+    }
+  } catch(e) { Logger.log('假日日曆檢查錯誤：' + e.message); }
+  return false; // 預設工作模式
+}
+
 // ======================== Highlight 候選產生（v2.28） ========================
 
 function buildHighlightCandidates_(courtEvents, deadlineEvents, consultations, adminEvents, caseAlertTodos, notionTodos) {
@@ -284,6 +325,54 @@ function buildHighlightCandidates_(courtEvents, deadlineEvents, consultations, a
   notionTodos.forEach(function(t) { add(t.icon, t.title + t.suffix, t.title); });
 
   return candidates.slice(0, 10);
+}
+
+// ======================== 假日 Highlight 候選產生（v2.31） ========================
+
+function buildHolidayHighlightCandidates_(familyEvents) {
+  var candidates = [], seen = {};
+
+  function add(icon, label, fullTitle) {
+    var key = fullTitle.substring(0, 50);
+    if (seen[key]) return;
+    seen[key] = true;
+    candidates.push({ icon: icon, label: truncateLabel_(label, 17), data: 'hl:' + truncateLabel_(fullTitle, 280) });
+  }
+
+  // 1. 家庭行事曆今日事件（如果有）
+  familyEvents.forEach(function(e) { add('👨‍👩‍👧', e.time ? e.time + ' ' + e.title : e.title, e.title); });
+
+  // 2. 生活類固定選項（輪替顯示，用 dayOfYear 做 offset）
+  var allLifeOptions = [
+    { icon: '🥾', label: '大坑步道走走', title: '大坑步道走走' },
+    { icon: '📚', label: '閱讀時間', title: '閱讀時間' },
+    { icon: '🎬', label: '看劇/電影', title: '看劇或電影' },
+    { icon: '🧹', label: '整理家務', title: '整理家務' },
+    { icon: '👨‍👩‍👧', label: '陪荳荳活動', title: '陪荳荳活動' },
+    { icon: '🍳', label: '研究美食/下廚', title: '研究美食或下廚' },
+    { icon: '📦', label: '清空收集箱', title: '清空 TickTick 收集箱' },
+    { icon: '😎', label: '翻 Someday 清單', title: '翻 Someday 清單挑一件推進' },
+    { icon: '💆', label: '純粹放空充電', title: '純粹放空充電' },
+    { icon: '📋', label: '下週預覽', title: '預覽下週行程與重要事項' },
+  ];
+
+  var now = new Date();
+  var start = new Date(now.getFullYear(), 0, 0);
+  var dayOfYear = Math.floor((now - start) / 86400000);
+  var offset = dayOfYear % allLifeOptions.length;
+
+  var slots = Math.max(1, 5 - candidates.length);
+  for (var i = 0; i < slots && i < allLifeOptions.length; i++) {
+    var opt = allLifeOptions[(offset + i) % allLifeOptions.length];
+    add(opt.icon, opt.label, opt.title);
+  }
+
+  // 週日固定加入下週預覽
+  if (now.getDay() === 0) {
+    add('📋', '下週預覽', '預覽下週行程與重要事項');
+  }
+
+  return candidates.slice(0, 8);
 }
 
 // ======================== Highlight Flex Message（v2.28：卡片內嵌按鈕） ========================
