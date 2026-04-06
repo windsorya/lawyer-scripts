@@ -98,6 +98,7 @@ function truncateLabel_(text, maxLen) {
 function sendMorningBriefing() {
   try { ensureConsultationFollowupTrigger_(); } catch(e) { Logger.log('Trigger check failed: ' + e); }
   try { ensureAutoCourtPrepTrigger_(); } catch(e) { Logger.log('autoCourtPrep trigger: ' + e); }
+  try {
   var today = new Date();
   var todayStr = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy/MM/dd (EEE)');
 
@@ -181,6 +182,11 @@ function sendMorningBriefing() {
 
   sendLinePush_(lineMessages);
   Logger.log('晨報推播完成：' + todayStr);
+  } catch(e) {
+    var errTs = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+    sendLinePush_([{type:'text',text:'⚠️ 律師晨報執行失敗\n錯誤：'+e.message+'\n時間：'+errTs}]);
+    Logger.log('晨報執行失敗：' + e.message);
+  }
 }
 
 // ======================== Notion 💼工作待辦 查詢（v2.28 新增） ========================
