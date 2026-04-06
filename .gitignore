@@ -10,3 +10,6 @@ gas/morning-briefing/creds.json
 *token*.json
 .env
 *.key
+*.pem
+*token*.json
+.env
