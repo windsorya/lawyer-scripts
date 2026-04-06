@@ -279,7 +279,7 @@ function getNotionTodoCandidates_(today) {
 function getTaiwanHolidayCalendar_() {
   var strategies = [
     function() { return CalendarApp.getCalendarById('zh-tw.taiwan.official#holiday@group.v.calendar.google.com'); },
-    function() { return CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com'); },
+    function() { return CalendarApp.getCalendarById('zh-tw.taiwan.official#holiday@group.v.calendar.google.com'); },
     function() { return CalendarApp.getCalendarById('en.taiwan#holiday@group.v.calendar.google.com'); },
     function() {
       var cals = CalendarApp.getCalendarsByName('台灣');
@@ -947,19 +947,3 @@ function testNotionTodos() {
 }
 
 function testGmailAlerts(){var r=getGmailAlerts(new Date());Logger.log(r||'（無命中信件）');}
-
-function testIsHolidayMode() {
-  var result = isHolidayMode_();
-  var cal = CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com');
-  var events = cal ? cal.getEventsForDay(new Date()) : [];
-  var titles = events.map(function(e) { return e.getTitle(); });
-  return JSON.stringify({holidayMode: result, calExists: !!cal, events: titles, dayOfWeek: new Date().getDay()});
-}
-
-function listAllCalendars() {
-  var cals = CalendarApp.getAllCalendars();
-  var result = cals.map(function(c) {
-    return {name: c.getName(), id: c.getId()};
-  });
-  return JSON.stringify(result);
-}
