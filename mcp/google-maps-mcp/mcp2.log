@@ -1,0 +1,427 @@
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                                                              │
+│                                FastMCP 3.2.0                                 │
+│                            https://gofastmcp.com                             │
+│                                                                              │
+│                  🖥  Server:      Google Maps MCP, 3.2.0                      │
+│                  🚀 Deploy free: https://horizon.prefect.io                  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[04/06/26 11:05:55] INFO     Starting MCP server 'Google Maps   transport.py:299
+                             MCP' with transport 'sse' on                       
+                             http://127.0.0.1:8002/sse                          
+INFO:     Started server process [4243]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8002 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52199 - "GET /sse HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52286 - "GET /sse HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52695 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.117:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.117:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=3eac89bef75849429dd7a74af0a7f74f HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.117:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=c69c4508927040e8a10f2faaff61f0b2 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=c69c4508927040e8a10f2faaff61f0b2 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=6d34aecd21114a45813811595fb5801a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=7f9cd76f3e1844689de7d760726ed602 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=c69c4508927040e8a10f2faaff61f0b2 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=7f9cd76f3e1844689de7d760726ed602 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=6d34aecd21114a45813811595fb5801a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=7f9cd76f3e1844689de7d760726ed602 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=6d34aecd21114a45813811595fb5801a HTTP/1.1" 202 Accepted
+INFO:     122.118.29.117:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=b9c06b4382614a11ade12da52f8d10b9 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=b9c06b4382614a11ade12da52f8d10b9 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=b9c06b4382614a11ade12da52f8d10b9 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=b9c06b4382614a11ade12da52f8d10b9 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.111:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.111:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.111:0 - "POST /messages/?session_id=fccfb25ee2ff4ed6b3f174e3ae91783c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.11:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.11:0 - "POST /messages/?session_id=447a45eaa98f433fb8d50ae68dee3b0b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e8190c7db1394075865ebc8582bbaaa5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.11:0 - "POST /messages/?session_id=447a45eaa98f433fb8d50ae68dee3b0b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e8190c7db1394075865ebc8582bbaaa5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=0a33d7f871c2401687e17cfe4672ab37 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e8190c7db1394075865ebc8582bbaaa5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.11:0 - "POST /messages/?session_id=447a45eaa98f433fb8d50ae68dee3b0b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=0a33d7f871c2401687e17cfe4672ab37 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=0a33d7f871c2401687e17cfe4672ab37 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=6ad79057b0844979aad1bd3c1d09f26c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.117:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=97c9373cab14412e9046043c5054fa33 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=cb00e501fe8640f2a49fb330b164d3ee HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=cb00e501fe8640f2a49fb330b164d3ee HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=66ae59e0161d43a9a28be6517c02e27a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=97c9373cab14412e9046043c5054fa33 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=cb00e501fe8640f2a49fb330b164d3ee HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=66ae59e0161d43a9a28be6517c02e27a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=97c9373cab14412e9046043c5054fa33 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=66ae59e0161d43a9a28be6517c02e27a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8894ece6f0214bbface8a204340acae1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8894ece6f0214bbface8a204340acae1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8894ece6f0214bbface8a204340acae1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8894ece6f0214bbface8a204340acae1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8894ece6f0214bbface8a204340acae1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8c6d5632fc46472c93a4a9620507ed5b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8c6d5632fc46472c93a4a9620507ed5b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8c6d5632fc46472c93a4a9620507ed5b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8c6d5632fc46472c93a4a9620507ed5b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8c6d5632fc46472c93a4a9620507ed5b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=7788bd6497964621a61628a308340aae HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.10:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=5df59945274f46f8a99520d5cd292081 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=cd6b5bc8179844be90f9f5e580ce9dd6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=7fc3a283e870446c99f5ef85f99f19fd HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=5df59945274f46f8a99520d5cd292081 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=cd6b5bc8179844be90f9f5e580ce9dd6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=7fc3a283e870446c99f5ef85f99f19fd HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=5df59945274f46f8a99520d5cd292081 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=7fc3a283e870446c99f5ef85f99f19fd HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=848255719e70434bb35bba90c8628966 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=cd6b5bc8179844be90f9f5e580ce9dd6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=c797c173e58b4f15ab77ff9403cf8a6b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=a454b6eddd564764bae3ac10189ea135 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=848255719e70434bb35bba90c8628966 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=c797c173e58b4f15ab77ff9403cf8a6b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=a454b6eddd564764bae3ac10189ea135 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=848255719e70434bb35bba90c8628966 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=c797c173e58b4f15ab77ff9403cf8a6b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=a454b6eddd564764bae3ac10189ea135 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=56e7d130276c491ca13e8709e27a8fad HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=eb267d8b03ed4f329d9d3043664c2e03 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=17b0775124bb43ceb4fa8231f468ada8 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=17b0775124bb43ceb4fa8231f468ada8 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=eb267d8b03ed4f329d9d3043664c2e03 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=eb267d8b03ed4f329d9d3043664c2e03 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=17b0775124bb43ceb4fa8231f468ada8 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=02f878aa853e4e3c994368f1353bb39d HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=02f878aa853e4e3c994368f1353bb39d HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=02f878aa853e4e3c994368f1353bb39d HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=3e3fd25c56fe4ae4aa07a27d56caf93c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=96da445972b64dbda91e6485111fed21 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=3cc809b9c3524fc799455f86aed72ef7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=96da445972b64dbda91e6485111fed21 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d9a2df790897449686fa4f90ceb8a5fa HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=3cc809b9c3524fc799455f86aed72ef7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=3cc809b9c3524fc799455f86aed72ef7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=96da445972b64dbda91e6485111fed21 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d9a2df790897449686fa4f90ceb8a5fa HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d9a2df790897449686fa4f90ceb8a5fa HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=4ac082b577304712bc7cba40740d9c4c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=f6415633277a430080472024a2e6e234 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=f6415633277a430080472024a2e6e234 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=bb5df444501145f6bc84aae63e2d2783 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=f6415633277a430080472024a2e6e234 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=14786159e1644ee7b9b40652df1de26a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=bb5df444501145f6bc84aae63e2d2783 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=bb5df444501145f6bc84aae63e2d2783 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=14786159e1644ee7b9b40652df1de26a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=14786159e1644ee7b9b40652df1de26a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.10:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=c5a7be58138343f7ba369432e86bfd39 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=be276bad746041fe939a4f15730ce9ab HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=26ed6bdf45c844efa4b57269e948d4c2 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=be276bad746041fe939a4f15730ce9ab HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=26ed6bdf45c844efa4b57269e948d4c2 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=be276bad746041fe939a4f15730ce9ab HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=26ed6bdf45c844efa4b57269e948d4c2 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e4681817660142f59faa7d0551ba4d32 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e4681817660142f59faa7d0551ba4d32 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e4681817660142f59faa7d0551ba4d32 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=c2eb38145938490a887cbadaa09dc7e3 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=64fe3a24457544518df8fbce5a838c6f HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=7b306614afca426e933d3aafe621842b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=5d45af63642149d6b48bfd20f7045d9b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=64fe3a24457544518df8fbce5a838c6f HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=5d45af63642149d6b48bfd20f7045d9b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=7b306614afca426e933d3aafe621842b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=64fe3a24457544518df8fbce5a838c6f HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=5d45af63642149d6b48bfd20f7045d9b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=7b306614afca426e933d3aafe621842b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=ef455f214b4a47e3879dea985a0cf179 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=ef455f214b4a47e3879dea985a0cf179 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=ef455f214b4a47e3879dea985a0cf179 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=ef455f214b4a47e3879dea985a0cf179 HTTP/1.1" 202 Accepted
+INFO:     2001:b400:e45f:abed:5d72:ecdc:673d:d1bb:0 - "GET /oauth/callback?code=NA_5zq45pam2d6v8m0x2rb9hkunhg5yf5fin1mkmi2y55lqswik&issuer=https%3A%2F%2Fauth.tesla.com%2Foauth2%2Fv3&state=7U2bhq6m_EHfj7FnoX4ePg HTTP/1.1" 404 Not Found
+INFO:     2001:b400:e45f:abed:5d72:ecdc:673d:d1bb:0 - "GET /oauth/callback?code=NA_87fcsqgdhuoyhibzxoairdekz3bvnxbmf404blrqogkt3uka&issuer=https%3A%2F%2Fauth.tesla.com%2Foauth2%2Fv3&state=7U2bhq6m_EHfj7FnoX4ePg HTTP/1.1" 404 Not Found
+INFO:     2001:b400:e45f:abed:5d72:ecdc:673d:d1bb:0 - "GET /oauth/callback?code=NA_87fcsqgdhuoyhibzxoairdekz3bvnxbmf404blrqogkt3uka&issuer=https%3A%2F%2Fauth.tesla.com%2Foauth2%2Fv3&state=7U2bhq6m_EHfj7FnoX4ePg HTTP/1.1" 404 Not Found
+INFO:     2001:b400:e45f:abed:5d72:ecdc:673d:d1bb:0 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     160.79.106.117:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.117:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=48d95790063f48feb17e86765323ce2e HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.118:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=ae7c23c16c0c4bf08014ba5bf841dea6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=8b95162006814b188cc9f07a576604c0 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=ae7c23c16c0c4bf08014ba5bf841dea6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=8b95162006814b188cc9f07a576604c0 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=d49958a7e9384b98bd9832e9ba1ae8da HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=ae7c23c16c0c4bf08014ba5bf841dea6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=8b95162006814b188cc9f07a576604c0 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=d49958a7e9384b98bd9832e9ba1ae8da HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=d49958a7e9384b98bd9832e9ba1ae8da HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=6279be7b04f04e5a8cbf2ec085d7af04 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=b34c626c03384c0180b520278bb891a4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=b34c626c03384c0180b520278bb891a4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8e236fb4f62e4f45ba4a43e79bc2dbaf HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=6f0e0c5b44a744e684c32ca9eaad8500 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=b34c626c03384c0180b520278bb891a4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=6f0e0c5b44a744e684c32ca9eaad8500 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8e236fb4f62e4f45ba4a43e79bc2dbaf HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=6f0e0c5b44a744e684c32ca9eaad8500 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=8e236fb4f62e4f45ba4a43e79bc2dbaf HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=3690ca0c270444cca9225fb2f8616c8c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=b4cee17f63874c538c6ed1bc7f1b3175 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=4e5ee52ee97749a5b72c146ab5a31e1c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=4e5ee52ee97749a5b72c146ab5a31e1c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=b4cee17f63874c538c6ed1bc7f1b3175 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=ecf6318390ec49318bc9f87883aa9f71 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=4e5ee52ee97749a5b72c146ab5a31e1c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=b4cee17f63874c538c6ed1bc7f1b3175 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=ecf6318390ec49318bc9f87883aa9f71 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=ecf6318390ec49318bc9f87883aa9f71 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=af6b1294e9474590b15c95507dbf5388 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.113:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=052c2a4c9f9e46d79638e6d3913205f7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=052c2a4c9f9e46d79638e6d3913205f7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=c8ee9732ecda49c3bdcfe89130a097cd HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=052c2a4c9f9e46d79638e6d3913205f7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=6c06dce2b0634cedb4f2061940221c4b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=c8ee9732ecda49c3bdcfe89130a097cd HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=6c06dce2b0634cedb4f2061940221c4b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=6c06dce2b0634cedb4f2061940221c4b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=c8ee9732ecda49c3bdcfe89130a097cd HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=3f39de4bb09e46f1b1cd510093a0c573 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.117:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=16ca008672404048b301551d678cc596 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=bbf3dda0c3b0495fb67be3174d4306f7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=72a5baf3845342b7a0070d51eddb6e84 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=16ca008672404048b301551d678cc596 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=bbf3dda0c3b0495fb67be3174d4306f7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=72a5baf3845342b7a0070d51eddb6e84 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=72a5baf3845342b7a0070d51eddb6e84 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=16ca008672404048b301551d678cc596 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=bbf3dda0c3b0495fb67be3174d4306f7 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=685ed99dbd904643a2c2b0b0b8707263 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=348b3a8727bd4635949d2a6bc88e50c3 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=ba6c78843be641a1b7631b95063c304a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=348b3a8727bd4635949d2a6bc88e50c3 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=ba6c78843be641a1b7631b95063c304a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=91ba42f9b87d4e799d27309883f9b17a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=348b3a8727bd4635949d2a6bc88e50c3 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.10:0 - "POST /messages/?session_id=ba6c78843be641a1b7631b95063c304a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=91ba42f9b87d4e799d27309883f9b17a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=91ba42f9b87d4e799d27309883f9b17a HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=2a3532048ca24189b549a1a15ecc4075 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e57e09de33fc4ffcb7ba32769b3dd611 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e57e09de33fc4ffcb7ba32769b3dd611 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=738ff58a977c4c74ba617f702c4276c1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=e57e09de33fc4ffcb7ba32769b3dd611 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=738ff58a977c4c74ba617f702c4276c1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d7aec8fbd4834d12883aadd1911a8382 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=738ff58a977c4c74ba617f702c4276c1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d7aec8fbd4834d12883aadd1911a8382 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d7aec8fbd4834d12883aadd1911a8382 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.117:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.117:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=0585cfb606f3404badc934a03f31e820 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.111:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=58bdcbe33c774652a433612529067db4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=b1fb96d0d346449280dfaf6fb6806155 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=b1fb96d0d346449280dfaf6fb6806155 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=58bdcbe33c774652a433612529067db4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=b1fb96d0d346449280dfaf6fb6806155 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.113:0 - "POST /messages/?session_id=58bdcbe33c774652a433612529067db4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.111:0 - "POST /messages/?session_id=598fba244ac04d869ca060e837583cf0 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.111:0 - "POST /messages/?session_id=598fba244ac04d869ca060e837583cf0 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.111:0 - "POST /messages/?session_id=598fba244ac04d869ca060e837583cf0 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.122:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.122:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.122:0 - "POST /messages/?session_id=f026bf7a56d94315b4394c41150bc66b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.118:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=8afbcb56fb2649ba8a0344b365b741f9 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=418aa6af0b064930bda0f7a00bd2eeb5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=8afbcb56fb2649ba8a0344b365b741f9 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=418aa6af0b064930bda0f7a00bd2eeb5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=aba9d1b99cf94065ad083a3d01cd1431 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=8afbcb56fb2649ba8a0344b365b741f9 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=418aa6af0b064930bda0f7a00bd2eeb5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=aba9d1b99cf94065ad083a3d01cd1431 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=aba9d1b99cf94065ad083a3d01cd1431 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=3bd725e9c1ba403abfeff9bde8c5a6e3 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.118:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=933765b260ca4ed58197ba3be8d41499 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=89383ebf1cd14b399b49e89c4d44e14c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=933765b260ca4ed58197ba3be8d41499 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=cedfc638bcc747dc9f69b3e8cbfaa5c5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=933765b260ca4ed58197ba3be8d41499 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=cedfc638bcc747dc9f69b3e8cbfaa5c5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=89383ebf1cd14b399b49e89c4d44e14c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.118:0 - "POST /messages/?session_id=cedfc638bcc747dc9f69b3e8cbfaa5c5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=89383ebf1cd14b399b49e89c4d44e14c HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=979c78979b224f109d1b3ed2dcad1c8e HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.11:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=1d191ce13bde4a58b69277627b1b8c2e HTTP/1.1" 202 Accepted
+INFO:     160.79.106.11:0 - "POST /messages/?session_id=3ee599865c8642c69b780d5d77ad223b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d9cfe96c2b844a2297b56c87a80350a4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=1d191ce13bde4a58b69277627b1b8c2e HTTP/1.1" 202 Accepted
+INFO:     160.79.106.11:0 - "POST /messages/?session_id=3ee599865c8642c69b780d5d77ad223b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.11:0 - "POST /messages/?session_id=3ee599865c8642c69b780d5d77ad223b HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d9cfe96c2b844a2297b56c87a80350a4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=1d191ce13bde4a58b69277627b1b8c2e HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=d9cfe96c2b844a2297b56c87a80350a4 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.11:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.11:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.11:0 - "POST /messages/?session_id=42e7b0566ad5402e8442e28f0ad98ddf HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=bc711a517500436ab5c99416e9e0bec6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=e3019161197f420498a350785c7051d5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=267aeb224f9649bea9a980a84f3b2f00 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=e3019161197f420498a350785c7051d5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=bc711a517500436ab5c99416e9e0bec6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=267aeb224f9649bea9a980a84f3b2f00 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=e3019161197f420498a350785c7051d5 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=267aeb224f9649bea9a980a84f3b2f00 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.115:0 - "POST /messages/?session_id=bc711a517500436ab5c99416e9e0bec6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.111:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.111:0 - "POST /messages/?session_id=e7d4160356994a78b49397953e8936e6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.111:0 - "POST /messages/?session_id=e7d4160356994a78b49397953e8936e6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.111:0 - "POST /messages/?session_id=e7d4160356994a78b49397953e8936e6 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.111:0 - "POST /messages/?session_id=e7d4160356994a78b49397953e8936e6 HTTP/1.1" 202 Accepted
+INFO:     2001:b400:e45f:abed:5d72:ecdc:673d:d1bb:0 - "GET /oauth/callback?code=NA_gmjn208ewkcj7n0j9rpz2xx5g5wtoju5fw07iu2n0izv1nbk&issuer=https%3A%2F%2Fauth.tesla.com%2Foauth2%2Fv3&state=iX95hqUerCR_xCnsCOFA9w HTTP/1.1" 404 Not Found
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=25bc5ff49ae6454484f960d9e2375a75 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=25bc5ff49ae6454484f960d9e2375a75 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=25bc5ff49ae6454484f960d9e2375a75 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=25bc5ff49ae6454484f960d9e2375a75 HTTP/1.1" 202 Accepted
+INFO:     2001:b400:e45f:abed:5d72:ecdc:673d:d1bb:0 - "GET /oauth/callback?code=NA_v4weffd30vz749a0skryuc0ns7va6kzszjrn8je1j50yx3r5&issuer=https%3A%2F%2Fauth.tesla.com%2Foauth2%2Fv3&state=iX95hqUerCR_xCnsCOFA9w HTTP/1.1" 404 Not Found
+INFO:     2001:b400:e45f:abed:5d72:ecdc:673d:d1bb:0 - "GET /oauth/callback?code=NA_jr22afrs174l8ormthur14x85g6l7rv2rjho521oykfqcnfj&issuer=https%3A%2F%2Fauth.tesla.com%2Foauth2%2Fv3&state=iX95hqUerCR_xCnsCOFA9w HTTP/1.1" 404 Not Found
+INFO:     160.79.106.117:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.117:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.117:0 - "POST /messages/?session_id=a8aae21ce1b940a89045f7cb47c10419 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.116:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=b8ca48a92991496497925e30d713f106 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=27d3cfd201d14d9092c177f6b71dd2b1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=8a58c56c3d2d4080a5541d182cc9b1ef HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=b8ca48a92991496497925e30d713f106 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=27d3cfd201d14d9092c177f6b71dd2b1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=8a58c56c3d2d4080a5541d182cc9b1ef HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=b8ca48a92991496497925e30d713f106 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=27d3cfd201d14d9092c177f6b71dd2b1 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.116:0 - "POST /messages/?session_id=8a58c56c3d2d4080a5541d182cc9b1ef HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=c531de48dc224a55bb7570e7c7e2a597 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.122:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.123:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.119:0 - "GET /sse HTTP/1.1" 200 OK
+INFO:     160.79.106.122:0 - "POST /messages/?session_id=593b9e23dd7649f5aa4984470e4f7742 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=84135749d70b4dafba8c26be2278bd2f HTTP/1.1" 202 Accepted
+INFO:     160.79.106.122:0 - "POST /messages/?session_id=593b9e23dd7649f5aa4984470e4f7742 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=518734e7681a49ff8a00141301156a65 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=84135749d70b4dafba8c26be2278bd2f HTTP/1.1" 202 Accepted
+INFO:     160.79.106.122:0 - "POST /messages/?session_id=593b9e23dd7649f5aa4984470e4f7742 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.123:0 - "POST /messages/?session_id=84135749d70b4dafba8c26be2278bd2f HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=518734e7681a49ff8a00141301156a65 HTTP/1.1" 202 Accepted
+INFO:     160.79.106.119:0 - "POST /messages/?session_id=518734e7681a49ff8a00141301156a65 HTTP/1.1" 202 Accepted

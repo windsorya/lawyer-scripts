@@ -1,9 +1,10 @@
-// LINE Bot v2.5 - 收發文自動化 + 全時段自動回覆 + 統一 Push 備查
+// LINE Bot v2.6 - 全時段自動回覆 + 統一 Push 備查（移除收發文自動化）
 // v2.0→v2.1: isDuplicate 改為只擋同用戶同內容重複訊息，不擋連續不同訊息
 // v2.1→v2.2: 黑名單過濾垃圾訊息 + 備查顯示 userId
 // v2.2→v2.3: 律師 LINE 指令封鎖垃圾用戶（封鎖+名字 → 查 Notion → blockUser）
 // v2.3→v2.4: 收發文自動化（file message → Drive 上傳 + Claude 辨識 + 擬稿 + 律師審核）
 // v2.4→v2.5: 收發文 bug fix（律師限定）+ Claude 動態擬稿 + 草稿獨立泡泡
+// v2.5→v2.6: 移除收發文自動化，file type 恢復原始 fallback 行為
 // 2026-04-06
 
 // ⚠️ 不要跑 setupAllProperties — Script Properties 已手動設定好
@@ -51,27 +52,12 @@ function doPost(e){
       var srcUserId=events[i].source.userId;
       var lawyerId=CONFIG.LAWYER_LINE_USER_ID;
 
-      // 檔案訊息：僅律師走收發文流程，非律師回 fallback
-      if(msg&&msg.type==='file'){
-        if(srcUserId===lawyerId){
-          handleFileMessage_(events[i]);
-        }else if(!isBlockedUser_(srcUserId)){
-          replyToLine_(events[i].replyToken,'您好，目前僅支援文字訊息的自動處理。\n\n如有法律問題，歡迎直接用文字描述您的狀況，律師會儘快回覆您。',CONFIG);
-        }
-        continue;
-      }
-
       // 律師文字指令
       if(msg&&msg.type==='text'&&srcUserId===lawyerId){
         var txt=msg.text.trim();
         if(txt.indexOf('封鎖')===0){
           var targetName=txt.substring(2).trim();
           if(targetName){handleBlockCommand_(events[i].replyToken,targetName);continue;}
-        }
-        if(txt==='送出'){handleSendCommand_(events[i].replyToken);continue;}
-        if(txt.indexOf('改 ')===0){
-          var editInstruction=txt.substring(2).trim();
-          if(editInstruction){handleEditCommand_(events[i].replyToken,editInstruction);continue;}
         }
       }
 
@@ -564,11 +550,9 @@ function listBlockedUsers(){
   else{Logger.log('共'+list.length+'筆封鎖：\n'+list.join('\n'));}
 }
 
-// ===== 收發文自動化 =====
-// Drive 資料夾 ID：100.收發文 (1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b)
-var MAIL_FOLDER_ID_='1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b';
-
-function handleFileMessage_(event){
+// ===== （收發文自動化已於 v2.6 移除）=====
+// 如需恢復，從 git 取回 v2.5 版本。
+// function handleFileMessage_(event){
   var CONFIG=getConfig_();
   var messageId=event.message.id;
   var fileName=event.message.fileName||('doc_'+messageId+'.pdf');

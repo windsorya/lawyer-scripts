@@ -1,5 +1,5 @@
 // ============================================================
-// 📋 律師晨報推播系統 v2.32
+// 📋 律師晨報推播系統 v2.30
 // 功能：每日 08:00 自動推播今日/明日庭期、辦案期限、諮詢預約、
 //       案件待辦到期、時效預警、家庭行程、身心狀態至 LINE（透過 Messaging API）
 // 作者：Claude for William
@@ -100,7 +100,6 @@ function sendMorningBriefing() {
   try { ensureAutoCourtPrepTrigger_(); } catch(e) { Logger.log('autoCourtPrep trigger: ' + e); }
   try {
   var today = new Date();
-  var holidayMode = isHolidayMode_();
   var todayStr = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy/MM/dd (EEE)');
 
   var lawyerAll = sortEvents(getLawyerDeadlineEvents(today));
@@ -143,7 +142,7 @@ function sendMorningBriefing() {
 
   var highlightEvents = sortEvents(getHighlightEvents(today));
   var highlightEmpty = (highlightEvents.length === 0);
-  message += holidayMode ? '\n⭐️【今日亮點】\n' : '\n⭐️【Highlight任務】\n';
+  message += '\n⭐️【Highlight任務】\n';
   if (highlightEmpty) { message += '⚠️ 今日尚未設定 Highlight，建議現在設定一個最重要的任務。\n'; }
   else { highlightEvents.forEach(function(e) { message += formatEvent(e); }); }
 
@@ -155,9 +154,6 @@ function sendMorningBriefing() {
   message += '\n🚨 【時效預警】\n';
   if (notionAlerts.deadlines.length === 0) { message += '目前無時效警示\n'; }
   else { notionAlerts.deadlines.forEach(function(d) { message += '▸ ' + d.emoji + ' ' + d.caseName + '｜剩 ' + d.daysLeft + ' 天（' + d.deadline + '）\n'; }); }
-
-  var gmailAlerts = getGmailAlerts(today);
-  if (gmailAlerts) message += gmailAlerts + '\n';
 
   if (hasChenActivity) { message += '\n👤【陳律動態】\n'; chenLeaveEvents.forEach(function(e) { message += '▸ ' + e.title + '\n'; }); chenCourtEvents.forEach(function(e) { message += formatEvent(e); }); }
 
@@ -173,37 +169,14 @@ function sendMorningBriefing() {
 
   var healthResult = getHealthStatus(today);
   message += '\n🧘 【身心狀態】\n' + healthResult.display;
-  if (healthResult.isFallback) message += '（注：以上為昨日數據，今日數據同步後將補發）\n';
   message += '\n━━━━━━━━━━━━━━\n';
   message += '💡 今日開庭準備 → https://claude.ai/new?q=今日開庭準備\n';
   message += '💡 領今日身心處方 → https://claude.ai/new?q=' + healthResult.prompt;
 
-  // 若拿到的是昨天的數據，建立 09:00 一次性 trigger 補發今日健康段落
-  if (healthResult.isFallback) {
-    try {
-      var nine = new Date(today);
-      nine.setHours(9, 0, 0, 0);
-      // 若已過 09:00，不建立（避免 trigger 立刻觸發造成混亂）
-      if (nine.getTime() > new Date().getTime()) {
-        ScriptApp.newTrigger('sendHealthSupplement')
-          .timeBased()
-          .at(nine)
-          .create();
-        Logger.log('已建立 09:00 健康數據補發 trigger');
-      }
-    } catch (trigErr) { Logger.log('建立補發 trigger 失敗：' + trigErr.message); }
-  }
-
   var lineMessages = buildTextMessages_(message);
 
-  var hlCandidates;
-  if (holidayMode) {
-    var familyEvts = getFamilyEvents(today, todayCourt, lawyerAll);
-    hlCandidates = buildHolidayHighlightCandidates_(familyEvts);
-  } else {
-    var notionTodos = getNotionTodoCandidates_(today);
-    hlCandidates = buildHighlightCandidates_(todayCourt, lawyerDeadlines, consultations, lawyerAdmin, notionAlerts.todos, notionTodos);
-  }
+  var notionTodos = getNotionTodoCandidates_(today);
+  var hlCandidates = buildHighlightCandidates_(todayCourt, lawyerDeadlines, consultations, lawyerAdmin, notionAlerts.todos, notionTodos);
   var flexMsg = buildHighlightFlexMessage_(highlightEmpty, hlCandidates);
   if (lineMessages.length < 5) lineMessages.push(flexMsg);
 
@@ -274,40 +247,6 @@ function getNotionTodoCandidates_(today) {
   return results.slice(0, 6);
 }
 
-// ======================== 假日模式判斷（v2.31） ========================
-
-function isHolidayMode_() {
-  var today = new Date();
-  var day = today.getDay(); // 0=Sun, 6=Sat
-  if (day === 0 || day === 6) {
-    // 週末但要排除補班日
-    try {
-      var cal = CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com');
-      if (cal) {
-        var events = cal.getEventsForDay(today);
-        for (var i = 0; i < events.length; i++) {
-          if (events[i].getTitle().indexOf('補行上班') >= 0) return false; // 補班日→工作模式
-        }
-      }
-    } catch(e) { Logger.log('假日日曆檢查錯誤：' + e.message); }
-    return true; // 一般週末→假日模式
-  }
-  // 非週末，檢查是否為國定假日
-  try {
-    var cal = CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com');
-    if (cal) {
-      var events = cal.getEventsForDay(today);
-      for (var i = 0; i < events.length; i++) {
-        var title = events[i].getTitle();
-        if (title.indexOf('補行上班') >= 0) return false;
-        // 有假日事件且不是補班→假日模式
-        return true;
-      }
-    }
-  } catch(e) { Logger.log('假日日曆檢查錯誤：' + e.message); }
-  return false; // 預設工作模式
-}
-
 // ======================== Highlight 候選產生（v2.28） ========================
 
 function buildHighlightCandidates_(courtEvents, deadlineEvents, consultations, adminEvents, caseAlertTodos, notionTodos) {
@@ -328,54 +267,6 @@ function buildHighlightCandidates_(courtEvents, deadlineEvents, consultations, a
   notionTodos.forEach(function(t) { add(t.icon, t.title + t.suffix, t.title); });
 
   return candidates.slice(0, 10);
-}
-
-// ======================== 假日 Highlight 候選產生（v2.31） ========================
-
-function buildHolidayHighlightCandidates_(familyEvents) {
-  var candidates = [], seen = {};
-
-  function add(icon, label, fullTitle) {
-    var key = fullTitle.substring(0, 50);
-    if (seen[key]) return;
-    seen[key] = true;
-    candidates.push({ icon: icon, label: truncateLabel_(label, 17), data: 'hl:' + truncateLabel_(fullTitle, 280) });
-  }
-
-  // 1. 家庭行事曆今日事件（如果有）
-  familyEvents.forEach(function(e) { add('👨‍👩‍👧', e.time ? e.time + ' ' + e.title : e.title, e.title); });
-
-  // 2. 生活類固定選項（輪替顯示，用 dayOfYear 做 offset）
-  var allLifeOptions = [
-    { icon: '🥾', label: '大坑步道走走', title: '大坑步道走走' },
-    { icon: '📚', label: '閱讀時間', title: '閱讀時間' },
-    { icon: '🎬', label: '看劇/電影', title: '看劇或電影' },
-    { icon: '🧹', label: '整理家務', title: '整理家務' },
-    { icon: '👨‍👩‍👧', label: '陪荳荳活動', title: '陪荳荳活動' },
-    { icon: '🍳', label: '研究美食/下廚', title: '研究美食或下廚' },
-    { icon: '📦', label: '清空收集箱', title: '清空 TickTick 收集箱' },
-    { icon: '😎', label: '翻 Someday 清單', title: '翻 Someday 清單挑一件推進' },
-    { icon: '💆', label: '純粹放空充電', title: '純粹放空充電' },
-    { icon: '📋', label: '下週預覽', title: '預覽下週行程與重要事項' },
-  ];
-
-  var now = new Date();
-  var start = new Date(now.getFullYear(), 0, 0);
-  var dayOfYear = Math.floor((now - start) / 86400000);
-  var offset = dayOfYear % allLifeOptions.length;
-
-  var slots = Math.max(1, 5 - candidates.length);
-  for (var i = 0; i < slots && i < allLifeOptions.length; i++) {
-    var opt = allLifeOptions[(offset + i) % allLifeOptions.length];
-    add(opt.icon, opt.label, opt.title);
-  }
-
-  // 週日固定加入下週預覽
-  if (now.getDay() === 0) {
-    add('📋', '下週預覽', '預覽下週行程與重要事項');
-  }
-
-  return candidates.slice(0, 8);
 }
 
 // ======================== Highlight Flex Message（v2.28：卡片內嵌按鈕） ========================
@@ -468,46 +359,8 @@ function getFamilyEvents(today, courtEvents, lawyerEvents) {
 
 // ======================== 身心狀態模組 ========================
 
-// 補發今日健康數據（由 sendMorningBriefing 在 fallback 時建立的 09:00 一次性 trigger 呼叫）
-function sendHealthSupplement() {
-  // Step 1：清除自己的 trigger，避免重複觸發
-  try {
-    var triggers = ScriptApp.getProjectTriggers();
-    for (var i = 0; i < triggers.length; i++) {
-      if (triggers[i].getHandlerFunction() === 'sendHealthSupplement') {
-        ScriptApp.deleteTrigger(triggers[i]);
-        Logger.log('已清除 sendHealthSupplement trigger');
-      }
-    }
-  } catch (te) { Logger.log('清除 trigger 失敗：' + te.message); }
-
-  // Step 2：重新讀取今日健康數據
-  try {
-    var today = new Date();
-    var ts = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
-    var td = readHealthSheet_(ts);
-    if (!td) {
-      Logger.log('sendHealthSupplement：09:00 仍無今日數據，略過補發');
-      return;
-    }
-
-    // Step 3：有今日數據 → 組裝補發訊息
-    var healthResult = buildHealthDisplay_(td, {});
-    var todayStr = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy/MM/dd (EEE)');
-    var msg = '📊 今日健康數據補發｜' + todayStr + '\n━━━━━━━━━━━━━━\n';
-    msg += '\n🧘 【身心狀態】\n' + healthResult.display;
-    msg += '\n━━━━━━━━━━━━━━\n';
-    msg += '💡 領今日身心處方 → https://claude.ai/new?q=' + healthResult.prompt;
-
-    sendLinePush_([{ type: 'text', text: msg }]);
-    Logger.log('健康數據補發完成：' + todayStr);
-  } catch (err) {
-    Logger.log('sendHealthSupplement 執行失敗：' + err.message);
-  }
-}
-
 function getHealthStatus(today) {
-  var fallback = { display: '尚無健康數據（Health Auto Export 尚未同步）\n', prompt: '充電', isFallback: false };
+  var fallback = { display: '尚無健康數據（Health Auto Export 尚未同步）\n', prompt: '充電' };
   try {
     var ts = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
     var td = readHealthSheet_(ts);
@@ -517,14 +370,9 @@ function getHealthStatus(today) {
       var ys = Utilities.formatDate(y, 'Asia/Taipei', 'yyyy-MM-dd');
       td = readHealthSheet_(ys);
       if (!td) return fallback;
-      var result = buildHealthDisplay_(td, {});
-      result.isFallback = true;  // 昨天的數據
-      return result;
     }
-    var result = buildHealthDisplay_(td, {});
-    result.isFallback = false;  // 今天的數據
-    return result;
-  } catch (err) { Logger.log('讀取健康數據錯誤：' + err.message); return { display: '健康數據讀取失敗\n', prompt: '充電', isFallback: false }; }
+    return buildHealthDisplay_(td, {});
+  } catch (err) { Logger.log('讀取健康數據錯誤：' + err.message); return { display: '健康數據讀取失敗\n', prompt: '充電' }; }
 }
 
 // 讀取指定日期的健康指標。
@@ -730,120 +578,6 @@ function getNotionTitle(p){if(!p||!p.title||p.title.length===0)return'';return p
 function getNotionRichText(p){if(!p||!p.rich_text||p.rich_text.length===0)return'';return p.rich_text.map(function(t){return t.plain_text;}).join('');}
 function getNotionDate(p){if(!p||!p.date||!p.date.start)return null;return p.date.start;}
 
-// ======================== Gmail 時效性通知攔截（v2.32） ========================
-
-function getGmailAlerts(today) {
-  try {
-    var query = 'is:unread newer_than:2d (from:律師公會 OR from:nchu.edu.tw OR from:gov.tw OR from:laf.org.tw)';
-    var threads = GmailApp.search(query, 0, 20);
-    if (threads.length === 0) return '';
-
-    var URGENCY_KW = ['報名', '開會', '期限', '截止', '回覆', '出席', '簽到', '繳費', '註冊', '研習', '訓練', '會議', '通知', '調查表', '問卷'];
-
-    function getSenderAlias(from) {
-      if (from.indexOf('律師公會') >= 0) return '公會';
-      if (from.indexOf('nchu') >= 0 || from.indexOf('中興') >= 0) return '中興';
-      if (from.indexOf('laf') >= 0 || from.indexOf('法律扶助') >= 0) return '法扶';
-      if (from.indexOf('judicial') >= 0) return '司法院';
-      if (from.indexOf('moj') >= 0) return '法務部';
-      if (from.indexOf('gov.tw') >= 0) return '政府';
-      var m = from.match(/^([^<@\n]+)/);
-      return m ? m[1].trim().substring(0, 4) : from.substring(0, 4);
-    }
-
-    var todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-    var yr = today.getFullYear();
-
-    function extractDeadlineDate(text) {
-      var patterns = [
-        { re: /(\d{3,4})年(\d{1,2})月(\d{1,2})日(?:前|截止)/, fn: function(m) {
-          var y = parseInt(m[1]) < 1000 ? parseInt(m[1]) + 1911 : parseInt(m[1]);
-          return new Date(y, parseInt(m[2])-1, parseInt(m[3]));
-        }},
-        { re: /截止(?:日期)?[：:]\s*(\d{4})\/(\d{1,2})\/(\d{1,2})/, fn: function(m) {
-          return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
-        }},
-        { re: /截止(?:日期)?[：:]\s*(\d{1,2})\/(\d{1,2})/, fn: function(m) {
-          return new Date(yr, parseInt(m[1])-1, parseInt(m[2]));
-        }},
-        { re: /(\d{1,2})月(\d{1,2})日前/, fn: function(m) {
-          return new Date(yr, parseInt(m[1])-1, parseInt(m[2]));
-        }},
-        { re: /(\d{1,2})\/(\d{1,2})前/, fn: function(m) {
-          return new Date(yr, parseInt(m[1])-1, parseInt(m[2]));
-        }},
-      ];
-      for (var i = 0; i < patterns.length; i++) {
-        var mm = text.match(patterns[i].re);
-        if (mm) {
-          var dt = patterns[i].fn(mm);
-          if (!isNaN(dt.getTime()) && dt.getTime() >= todayStart) {
-            return { date: dt, str: (dt.getMonth()+1) + '/' + dt.getDate() };
-          }
-        }
-      }
-      return null;
-    }
-
-    var alerts = [];
-    threads.forEach(function(thread) {
-      try {
-        var msgs = thread.getMessages();
-        var msg = msgs[msgs.length - 1];
-        if (!msg.isUnread()) return;
-        var from = msg.getFrom() || '';
-        var subject = msg.getSubject() || '';
-        var body500 = msg.getPlainBody().substring(0, 500);
-        var combined = subject + ' ' + body500;
-
-        var hasUrgency = URGENCY_KW.some(function(kw) { return combined.indexOf(kw) >= 0; });
-        if (!hasUrgency) return;
-
-        var alias = getSenderAlias(from);
-        var dl = extractDeadlineDate(combined);
-
-        if (dl) {
-          try {
-            var lawyerCal = CalendarApp.getCalendarById(CONFIG.LAWYER_CALENDAR_ID);
-            if (lawyerCal) {
-              var evTitle = '⏰期限：' + alias;
-              var ds = new Date(dl.date); ds.setHours(0,0,0,0);
-              var de = new Date(dl.date); de.setHours(23,59,59,999);
-              var dup = lawyerCal.getEvents(ds, de).some(function(ev) { return ev.getTitle() === evTitle; });
-              if (!dup) lawyerCal.createAllDayEvent(evTitle, dl.date);
-            }
-          } catch(calErr) { Logger.log('Gmail alert 建行事曆失敗：' + calErr.message); }
-        }
-
-        var tag = dl ? '⌛截止 ' + dl.str : '';
-        if (!tag) {
-          var mm2 = combined.match(/(\d{1,2})月(\d{1,2})日/);
-          if (mm2 && (combined.indexOf('開會') >= 0 || combined.indexOf('會議') >= 0 || combined.indexOf('出席') >= 0)) {
-            tag = '📅開會 ' + mm2[1] + '/' + mm2[2];
-          }
-        }
-        if (!tag) tag = '📌注意';
-
-        alerts.push({ alias: alias, subject: subject.substring(0, 30), tag: tag });
-      } catch(msgErr) { Logger.log('Gmail 讀取訊息錯誤：' + msgErr.message); }
-    });
-
-    if (alerts.length === 0) return '';
-
-    var out = '\n📧 重要 Email 通知\n━━━━━━━━━━━━\n';
-    alerts.forEach(function(a) {
-      out += '• [' + a.alias + '] ' + a.tag + '\n';
-      out += '  「' + a.subject + '」\n';
-    });
-    out += '━━━━━━━━━━━━';
-    return out;
-
-  } catch(err) {
-    Logger.log('getGmailAlerts 執行失敗：' + err.message);
-    return '';
-  }
-}
-
 // ======================== LINE Messaging API 模組 ========================
 
 function buildTextMessages_(text) {
@@ -916,5 +650,3 @@ function testNotionTodos() {
   Logger.log('Notion 待辦候選（'+ts.length+' 項）：');
   ts.forEach(function(t,i){Logger.log((i+1)+'. '+t.icon+' '+t.title+t.suffix);});
 }
-
-function testGmailAlerts(){var r=getGmailAlerts(new Date());Logger.log(r||'（無命中信件）');}
