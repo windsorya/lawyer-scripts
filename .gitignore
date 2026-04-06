@@ -4,3 +4,9 @@ __pycache__/
 *.env
 keys.env
 gas/morning-briefing/creds.json
+
+# Sensitive keys
+*.pem
+*token*.json
+.env
+*.key
