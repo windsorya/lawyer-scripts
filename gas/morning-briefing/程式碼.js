@@ -169,9 +169,26 @@ function sendMorningBriefing() {
 
   var healthResult = getHealthStatus(today);
   message += '\n🧘 【身心狀態】\n' + healthResult.display;
+  if (healthResult.isFallback) message += '（注：以上為昨日數據，今日數據同步後將補發）\n';
   message += '\n━━━━━━━━━━━━━━\n';
   message += '💡 今日開庭準備 → https://claude.ai/new?q=今日開庭準備\n';
   message += '💡 領今日身心處方 → https://claude.ai/new?q=' + healthResult.prompt;
+
+  // 若拿到的是昨天的數據，建立 09:00 一次性 trigger 補發今日健康段落
+  if (healthResult.isFallback) {
+    try {
+      var nine = new Date(today);
+      nine.setHours(9, 0, 0, 0);
+      // 若已過 09:00，不建立（避免 trigger 立刻觸發造成混亂）
+      if (nine.getTime() > new Date().getTime()) {
+        ScriptApp.newTrigger('sendHealthSupplement')
+          .timeBased()
+          .at(nine)
+          .create();
+        Logger.log('已建立 09:00 健康數據補發 trigger');
+      }
+    } catch (trigErr) { Logger.log('建立補發 trigger 失敗：' + trigErr.message); }
+  }
 
   var lineMessages = buildTextMessages_(message);
 
@@ -359,8 +376,46 @@ function getFamilyEvents(today, courtEvents, lawyerEvents) {
 
 // ======================== 身心狀態模組 ========================
 
+// 補發今日健康數據（由 sendMorningBriefing 在 fallback 時建立的 09:00 一次性 trigger 呼叫）
+function sendHealthSupplement() {
+  // Step 1：清除自己的 trigger，避免重複觸發
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    for (var i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === 'sendHealthSupplement') {
+        ScriptApp.deleteTrigger(triggers[i]);
+        Logger.log('已清除 sendHealthSupplement trigger');
+      }
+    }
+  } catch (te) { Logger.log('清除 trigger 失敗：' + te.message); }
+
+  // Step 2：重新讀取今日健康數據
+  try {
+    var today = new Date();
+    var ts = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
+    var td = readHealthSheet_(ts);
+    if (!td) {
+      Logger.log('sendHealthSupplement：09:00 仍無今日數據，略過補發');
+      return;
+    }
+
+    // Step 3：有今日數據 → 組裝補發訊息
+    var healthResult = buildHealthDisplay_(td, {});
+    var todayStr = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy/MM/dd (EEE)');
+    var msg = '📊 今日健康數據補發｜' + todayStr + '\n━━━━━━━━━━━━━━\n';
+    msg += '\n🧘 【身心狀態】\n' + healthResult.display;
+    msg += '\n━━━━━━━━━━━━━━\n';
+    msg += '💡 領今日身心處方 → https://claude.ai/new?q=' + healthResult.prompt;
+
+    sendLinePush_([{ type: 'text', text: msg }]);
+    Logger.log('健康數據補發完成：' + todayStr);
+  } catch (err) {
+    Logger.log('sendHealthSupplement 執行失敗：' + err.message);
+  }
+}
+
 function getHealthStatus(today) {
-  var fallback = { display: '尚無健康數據（Health Auto Export 尚未同步）\n', prompt: '充電' };
+  var fallback = { display: '尚無健康數據（Health Auto Export 尚未同步）\n', prompt: '充電', isFallback: false };
   try {
     var ts = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
     var td = readHealthSheet_(ts);
@@ -370,9 +425,14 @@ function getHealthStatus(today) {
       var ys = Utilities.formatDate(y, 'Asia/Taipei', 'yyyy-MM-dd');
       td = readHealthSheet_(ys);
       if (!td) return fallback;
+      var result = buildHealthDisplay_(td, {});
+      result.isFallback = true;  // 昨天的數據
+      return result;
     }
-    return buildHealthDisplay_(td, {});
-  } catch (err) { Logger.log('讀取健康數據錯誤：' + err.message); return { display: '健康數據讀取失敗\n', prompt: '充電' }; }
+    var result = buildHealthDisplay_(td, {});
+    result.isFallback = false;  // 今天的數據
+    return result;
+  } catch (err) { Logger.log('讀取健康數據錯誤：' + err.message); return { display: '健康數據讀取失敗\n', prompt: '充電', isFallback: false }; }
 }
 
 // 讀取指定日期的健康指標。
