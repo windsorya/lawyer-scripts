@@ -276,13 +276,41 @@ function getNotionTodoCandidates_(today) {
 
 // ======================== 假日模式判斷（v2.31） ========================
 
+function getTaiwanHolidayCalendar_() {
+  var strategies = [
+    function() { return CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com'); },
+    function() { return CalendarApp.getCalendarById('en.taiwan#holiday@group.v.calendar.google.com'); },
+    function() {
+      var cals = CalendarApp.getCalendarsByName('台灣');
+      return cals.length > 0 ? cals[0] : null;
+    },
+    function() {
+      var cals = CalendarApp.getCalendarsByName('Taiwan');
+      return cals.length > 0 ? cals[0] : null;
+    }
+  ];
+  for (var i = 0; i < strategies.length; i++) {
+    try {
+      var cal = strategies[i]();
+      if (cal) {
+        Logger.log('getTaiwanHolidayCalendar_: 策略 ' + (i+1) + ' 成功，日曆名稱：' + cal.getName());
+        return cal;
+      }
+    } catch(e) {
+      Logger.log('getTaiwanHolidayCalendar_: 策略 ' + (i+1) + ' 失敗：' + e.message);
+    }
+  }
+  Logger.log('getTaiwanHolidayCalendar_: 全部策略失敗，回傳 null');
+  return null;
+}
+
 function isHolidayMode_() {
   var today = new Date();
   var day = today.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) {
     // 週末但要排除補班日
     try {
-      var cal = CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com');
+      var cal = getTaiwanHolidayCalendar_();
       if (cal) {
         var events = cal.getEventsForDay(today);
         for (var i = 0; i < events.length; i++) {
@@ -294,7 +322,7 @@ function isHolidayMode_() {
   }
   // 非週末，檢查是否為國定假日
   try {
-    var cal = CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com');
+    var cal = getTaiwanHolidayCalendar_();
     if (cal) {
       var events = cal.getEventsForDay(today);
       for (var i = 0; i < events.length; i++) {
@@ -918,3 +946,11 @@ function testNotionTodos() {
 }
 
 function testGmailAlerts(){var r=getGmailAlerts(new Date());Logger.log(r||'（無命中信件）');}
+
+function testIsHolidayMode() {
+  var result = isHolidayMode_();
+  var cal = CalendarApp.getCalendarById('zh-tw.taiwan#holiday@group.v.calendar.google.com');
+  var events = cal ? cal.getEventsForDay(new Date()) : [];
+  var titles = events.map(function(e) { return e.getTitle(); });
+  return JSON.stringify({holidayMode: result, calExists: !!cal, events: titles, dayOfWeek: new Date().getDay()});
+}
