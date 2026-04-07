@@ -136,6 +136,8 @@ function sendMorningBriefing() {
   var hasChenActivity = chenCourtEvents.length > 0 || chenLeaveEvents.length > 0;
 
   var message = '📋 律師晨報｜' + todayStr + '\n━━━━━━━━━━━━━━\n';
+  var ritualSection = getRitualReminders();
+  if (ritualSection) message += ritualSection;
   if (hasLeave) message += '\n⚠️ ' + leaveNames + '｜今日行政待辦需律師自行處理\n';
 
   var todayCourt = sortEvents(getCourtEvents(today, 0));
@@ -1396,3 +1398,67 @@ function testNotionTodos() {
 }
 
 function testGmailAlerts(){var r=getGmailAlerts(new Date());Logger.log(r||'（無命中信件）');}
+
+// ─── 家庭儀式地雷掃描 ──────────────────────────────────────────────────────
+
+var FAMILY_RITUALS = [
+  { date: '04-09', name: '老婆生日',   leadDays: 30, checklist: '餐廳訂位（你出錢）+ 蛋糕 + 禮物 + 當天不排公務' },
+  { date: '01-05', name: '荳荳生日',   leadDays: 14, checklist: '特別餐廳 + 蛋糕 + 禮物' },
+  { date: '02-14', name: '情人節',     leadDays: 14, checklist: '餐廳或活動安排' },
+  { date: '02-22', name: '王志文生日', leadDays: 7,  checklist: '老婆會安排，配合即可' },
+  { date: '07-02', name: '潭子爸生日', leadDays: 14, checklist: '主動提出慶生安排' },
+  { date: '11-08', name: '潭子媽生日', leadDays: 14, checklist: '主動提出慶生安排' },
+  { date: '12-27', name: '台中爸生日', leadDays: 7,  checklist: '參與老婆安排 + 帶荳去看' },
+  { date: '12-24', name: '聖誕節',     leadDays: 30, checklist: '配合荳荳禮物工程' },
+];
+
+/**
+ * 掃描未來 leadDays 天內的家庭重要日期，回傳提醒文字。
+ * 無命中時回傳空字串，由 sendMorningBriefing 決定是否插入段落。
+ */
+function getRitualReminders() {
+  var tz = 'Asia/Taipei';
+  var now = new Date();
+  var todayStr = Utilities.formatDate(now, tz, 'MM-dd');
+  var todayYear = parseInt(Utilities.formatDate(now, tz, 'yyyy'));
+
+  var lines = [];
+
+  FAMILY_RITUALS.forEach(function(r) {
+    // 計算今年和明年的目標日期，取最近且 >= 今天的那個
+    var parts = r.date.split('-');
+    var mm = parseInt(parts[0]);
+    var dd = parseInt(parts[1]);
+
+    var thisYear = new Date(todayYear, mm - 1, dd);
+    var nextYear = new Date(todayYear + 1, mm - 1, dd);
+
+    // 今天 0:00（台北時區）
+    var todayMidnight = new Date(
+      parseInt(Utilities.formatDate(now, tz, 'yyyy')),
+      parseInt(Utilities.formatDate(now, tz, 'MM')) - 1,
+      parseInt(Utilities.formatDate(now, tz, 'dd'))
+    );
+
+    var target = (thisYear >= todayMidnight) ? thisYear : nextYear;
+    var daysLeft = Math.round((target - todayMidnight) / (1000 * 60 * 60 * 24));
+
+    if (daysLeft < 0 || daysLeft > r.leadDays) return;
+
+    var icon;
+    if (daysLeft === 0)      icon = '🔴';
+    else if (daysLeft <= 7)  icon = '🟡';
+    else                     icon = '⚪';
+
+    var line;
+    if (daysLeft === 0) {
+      line = icon + ' 今天是' + r.name + '！' + r.checklist;
+    } else {
+      line = icon + ' ' + r.name + '倒數 ' + daysLeft + ' 天｜' + r.checklist;
+    }
+    lines.push(line);
+  });
+
+  if (lines.length === 0) return '';
+  return '\n🎂 家庭儀式提醒\n' + lines.join('\n') + '\n';
+}
