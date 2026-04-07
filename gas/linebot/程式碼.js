@@ -87,9 +87,13 @@ function doPost(e){
             if(targetUserId){targetName=getUserDisplayName_(targetUserId,CONFIG);}
           }
           if(targetUserId){
-            scriptProps.setProperty('takeover_'+targetUserId,String(Date.now()+2*60*60*1000));
+            var isByName=takeoverCmd.indexOf('0 ')===0;
+            // 按姓名：永久暫停（極大值）；按最近用戶：2小時
+            var expiry=isByName?String(9999999999999):String(Date.now()+2*60*60*1000);
+            var durationLabel=isByName?'永久':'2小時';
+            scriptProps.setProperty('takeover_'+targetUserId,expiry);
             scriptProps.setProperty('last_paused_user_id',targetUserId);
-            pushToLawyer_('⏸ 已暫停自動回覆（2小時）\n👤 '+targetName+'\n🔑 '+targetUserId,CONFIG);
+            pushToLawyer_('⏸ 已暫停自動回覆（'+durationLabel+'）\n👤 '+targetName+'\n🔑 '+targetUserId,CONFIG);
           }else{
             pushToLawyer_('⚠️ 尚無最近發訊用戶可暫停',CONFIG);
           }
