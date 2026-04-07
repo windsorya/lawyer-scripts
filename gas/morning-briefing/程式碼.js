@@ -403,8 +403,9 @@ function buildHighlightCandidates_(courtEvents, deadlineEvents, consultations, a
 
   courtEvents.forEach(function(e) { add('⚖️', e.time ? e.time + ' ' + e.title : e.title, e.title); });
   deadlineEvents.forEach(function(e) { add('⏰', e.title.replace(/^⏰\s*/, ''), e.title); });
-  consultations.forEach(function(e) { add('💬', e.time ? e.time + ' ' + e.title : e.title, e.title); });
-  adminEvents.forEach(function(e) { add('📌', e.title, e.title); });
+  // 有固定時間的諮詢/行政行程已列在晨報正文，不再放進 Highlight（避免重複且無需選擇）
+  consultations.forEach(function(e) { if (e.allDay) add('💬', e.title, e.title); });
+  adminEvents.forEach(function(e) { if (e.allDay) add('📌', e.title, e.title); });
   caseAlertTodos.forEach(function(t) { add('📋', t.caseName + '：' + t.todo, t.caseName + '：' + t.todo); });
   notionTodos.forEach(function(t) { add(t.icon, t.title + t.suffix, t.title); });
 
