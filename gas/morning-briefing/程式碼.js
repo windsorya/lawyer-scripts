@@ -1053,15 +1053,16 @@ function handleTaskAction_(replyToken, data) {
     result = { ok: false, msg: '❌ 操作失敗：' + err.message };
   }
 
-  // 完成任務後，附上更新後的 Highlight 選單（已完成的任務自動排除）
-  var msgs = [{type:'text', text: result.msg}];
+  // Reply 只送確認文字（快速，避免 reply token 過期）
+  sendLineReply_(replyToken, [{type:'text', text: result.msg}]);
+
+  // 完成任務後，另用 Push 送更新版 Highlight 選單（不依賴 reply token，不會超時）
   if (action === 'done' && result.ok) {
     try {
       var hlFlex = buildRefreshedHighlightFlex_();
-      msgs.push(hlFlex);
+      sendLinePush_([hlFlex]);
     } catch(hlErr) { Logger.log('buildRefreshedHighlightFlex_ 失敗：' + hlErr.message); }
   }
-  sendLineReply_(replyToken, msgs);
 }
 
 // 完成任務後重新產出 Highlight flex（重新抓 Notion todos，已完成的已被 checkbox filter 排除）
