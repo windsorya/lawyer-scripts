@@ -68,26 +68,34 @@ function doPost(e){
           if(lastUser){
             scriptProps.setProperty('takeover_'+lastUser,String(Date.now()+2*60*60*1000));
             scriptProps.setProperty('last_paused_user_id',lastUser);
-            Logger.log('接管：暫停用戶 '+lastUser+' 2小時');
+            var pauseName=getUserDisplayName_(lastUser,CONFIG);
+            pushToLawyer_('⏸ 已暫停自動回覆（2小時）\n👤 '+pauseName+'\n🔑 '+lastUser,CONFIG);
+          }else{
+            pushToLawyer_('⚠️ 尚無最近發訊用戶可暫停',CONFIG);
           }
           continue;
         }
         if(takeoverCmd==='1'){
           var lastPaused=scriptProps.getProperty('last_paused_user_id');
-          if(lastPaused){scriptProps.deleteProperty('takeover_'+lastPaused);}
-          Logger.log('接管：恢復用戶 '+lastPaused);
+          if(lastPaused){
+            scriptProps.deleteProperty('takeover_'+lastPaused);
+            var resumeName=getUserDisplayName_(lastPaused,CONFIG);
+            pushToLawyer_('▶️ 已恢復自動回覆\n👤 '+resumeName+'\n🔑 '+lastPaused,CONFIG);
+          }else{
+            pushToLawyer_('⚠️ 沒有被暫停的用戶可恢復',CONFIG);
+          }
           continue;
         }
         if(takeoverCmd==='00'){
           scriptProps.setProperty('takeover_global',String(Date.now()+2*60*60*1000));
-          Logger.log('接管：全域暫停 2小時');
+          pushToLawyer_('⏸⏸ 全域暫停已開啟（所有用戶，2小時）',CONFIG);
           continue;
         }
         if(takeoverCmd==='11'){
           var allProps=scriptProps.getProperties();
           Object.keys(allProps).filter(function(k){return k.indexOf('takeover_')===0;}).forEach(function(k){scriptProps.deleteProperty(k);});
           scriptProps.deleteProperty('last_paused_user_id');
-          Logger.log('接管：全域恢復，清除所有暫停');
+          pushToLawyer_('▶️▶️ 全域恢復，所有暫停已清除',CONFIG);
           continue;
         }
       }
