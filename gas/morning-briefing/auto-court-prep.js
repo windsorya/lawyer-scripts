@@ -653,7 +653,7 @@ function generateCourtPrep_(caseType, caseInfo, notionContent) {
 
   var prompt = buildCourtPrepPrompt_(caseType, caseInfo, notionContent);
   var payload = {
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 8000,
     system: '你是一位台灣律師的法律助理，專精台灣法院實務與訴訟程序。請以繁體中文、簡潔可直接使用的格式生成開庭準備文件。避免廢話，著重實際可操作的準備事項。',
     messages: [{ role: 'user', content: prompt }]
@@ -669,7 +669,8 @@ function generateCourtPrep_(caseType, caseInfo, notionContent) {
           'content-type': 'application/json'
         },
         payload: JSON.stringify(payload),
-        muteHttpExceptions: true
+        muteHttpExceptions: true,
+        deadline: 55
       });
       var code = response.getResponseCode();
       var data = JSON.parse(response.getContentText());
