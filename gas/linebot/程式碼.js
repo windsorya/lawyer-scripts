@@ -99,12 +99,32 @@ function doPost(e){
           }
           continue;
         }
-        if(takeoverCmd==='1'){
-          var lastPaused=scriptProps.getProperty('last_paused_user_id');
-          if(lastPaused){
-            scriptProps.deleteProperty('takeover_'+lastPaused);
-            var resumeName=getUserDisplayName_(lastPaused,CONFIG);
-            pushToLawyer_('▶️ 已恢復自動回覆\n👤 '+resumeName+'\n🔑 '+lastPaused,CONFIG);
+        if(takeoverCmd==='1'||takeoverCmd.indexOf('1 ')===0){
+          var resumeUserId=null,resumeName=null;
+          if(takeoverCmd.indexOf('1 ')===0){
+            // 按姓名恢復
+            var resumeQuery=takeoverCmd.substring(2).trim().toLowerCase();
+            try{
+              var rnc=JSON.parse(scriptProps.getProperty('user_name_cache')||'{}');
+              var rmatched=Object.keys(rnc).filter(function(n){return n.toLowerCase().indexOf(resumeQuery)>=0;});
+              if(rmatched.length===1){
+                resumeUserId=rnc[rmatched[0]];resumeName=rmatched[0];
+              }else if(rmatched.length>1){
+                pushToLawyer_('⚠️ 找到多個符合「'+resumeQuery+'」的用戶：\n'+rmatched.slice(0,5).join('\n')+'\n\n請輸入更精確的名字',CONFIG);
+                continue;
+              }else{
+                pushToLawyer_('⚠️ 找不到「'+resumeQuery+'」',CONFIG);
+                continue;
+              }
+            }catch(e){pushToLawyer_('⚠️ cache 查詢失敗：'+e,CONFIG);continue;}
+          }else{
+            // 恢復最後一個被暫停的用戶
+            resumeUserId=scriptProps.getProperty('last_paused_user_id');
+            if(resumeUserId){resumeName=getUserDisplayName_(resumeUserId,CONFIG);}
+          }
+          if(resumeUserId){
+            scriptProps.deleteProperty('takeover_'+resumeUserId);
+            pushToLawyer_('▶️ 已恢復自動回覆\n👤 '+resumeName+'\n🔑 '+resumeUserId,CONFIG);
           }else{
             pushToLawyer_('⚠️ 沒有被暫停的用戶可恢復',CONFIG);
           }
