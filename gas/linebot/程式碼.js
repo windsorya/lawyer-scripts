@@ -63,13 +63,33 @@ function doPost(e){
       // 律師接管指令：0/1/00/11（在律師其他指令前處理）
       if(msg&&msg.type==='text'&&srcUserId===lawyerId&&lawyerId!==''){
         var takeoverCmd=msg.text.trim();
-        if(takeoverCmd==='0'){
-          var lastUser=scriptProps.getProperty('last_message_user_id');
-          if(lastUser){
-            scriptProps.setProperty('takeover_'+lastUser,String(Date.now()+2*60*60*1000));
-            scriptProps.setProperty('last_paused_user_id',lastUser);
-            var pauseName=getUserDisplayName_(lastUser,CONFIG);
-            pushToLawyer_('⏸ 已暫停自動回覆（2小時）\n👤 '+pauseName+'\n🔑 '+lastUser,CONFIG);
+        if(takeoverCmd==='0'||takeoverCmd.indexOf('0 ')===0){
+          var targetUserId=null,targetName=null;
+          if(takeoverCmd.indexOf('0 ')===0){
+            // 按姓名暫停：查 user_name_cache 模糊比對
+            var nameQuery=takeoverCmd.substring(2).trim().toLowerCase();
+            try{
+              var nc=JSON.parse(scriptProps.getProperty('user_name_cache')||'{}');
+              var matched=Object.keys(nc).filter(function(n){return n.toLowerCase().indexOf(nameQuery)>=0;});
+              if(matched.length===1){
+                targetUserId=nc[matched[0]];targetName=matched[0];
+              }else if(matched.length>1){
+                pushToLawyer_('⚠️ 找到多個符合「'+nameQuery+'」的用戶：\n'+matched.slice(0,5).join('\n')+'\n\n請輸入更精確的名字',CONFIG);
+                continue;
+              }else{
+                pushToLawyer_('⚠️ 找不到「'+nameQuery+'」，請確認拼字或等對方發一則訊息後再試',CONFIG);
+                continue;
+              }
+            }catch(e){pushToLawyer_('⚠️ cache 查詢失敗：'+e,CONFIG);continue;}
+          }else{
+            // 按最近發訊用戶暫停
+            targetUserId=scriptProps.getProperty('last_message_user_id');
+            if(targetUserId){targetName=getUserDisplayName_(targetUserId,CONFIG);}
+          }
+          if(targetUserId){
+            scriptProps.setProperty('takeover_'+targetUserId,String(Date.now()+2*60*60*1000));
+            scriptProps.setProperty('last_paused_user_id',targetUserId);
+            pushToLawyer_('⏸ 已暫停自動回覆（2小時）\n👤 '+targetName+'\n🔑 '+targetUserId,CONFIG);
           }else{
             pushToLawyer_('⚠️ 尚無最近發訊用戶可暫停',CONFIG);
           }
@@ -169,9 +189,21 @@ function processMessageEvent_(event){
   if(isDuplicate_(userId,messageText))return;
 
   // 記錄最近訊息的 userId（用於抓律師自己的 user ID）
-  PropertiesService.getScriptProperties().setProperty('LAST_USER_ID',userId);
+  var sp=PropertiesService.getScriptProperties();
+  sp.setProperty('LAST_USER_ID',userId);
 
   var displayName=getUserDisplayName_(userId,CONFIG);
+
+  // 更新姓名→userId 快取（供接管機制按姓名暫停使用）
+  try{
+    var cacheRaw=sp.getProperty('user_name_cache')||'{}';
+    var cache=JSON.parse(cacheRaw);
+    cache[displayName]=userId;
+    // 最多保留 200 筆，超過刪最舊的
+    var keys=Object.keys(cache);
+    if(keys.length>200){delete cache[keys[0]];}
+    sp.setProperty('user_name_cache',JSON.stringify(cache));
+  }catch(e){Logger.log('name cache error: '+e);}
 
   // ── 簡單問候過濾 ──
   var greetingReply=handleGreeting_(messageText);
