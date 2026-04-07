@@ -1063,35 +1063,27 @@ function handleTaskAction_(replyToken, data) {
 // Debounce：任務操作後延遲 ~1 分鐘才推 Highlight，避免多次連點時每次都打斷畫面
 // 每次呼叫都會取消舊的 trigger，重設新的（從最後一次操作起算 1 分鐘）
 function scheduleHighlightPush_() {
-  var props = PropertiesService.getScriptProperties();
-  // 刪除舊的 pending trigger
-  var existingId = props.getProperty('PENDING_HL_TRIGGER');
-  if (existingId) {
-    try {
-      ScriptApp.getProjectTriggers().forEach(function(t) {
-        if (t.getUniqueId() === existingId) ScriptApp.deleteTrigger(t);
-      });
-    } catch(e) {}
-    props.deleteProperty('PENDING_HL_TRIGGER');
-  }
-  // 建新 trigger：從現在起 65 秒後執行（GAS 最小精度約 1 分鐘）
-  try {
-    var when = new Date(Date.now() + 65000);
-    var trigger = ScriptApp.newTrigger('pushHighlightPending_').timeBased().at(when).create();
-    props.setProperty('PENDING_HL_TRIGGER', trigger.getUniqueId());
-    Logger.log('已安排 Highlight 推播：' + when.toISOString());
-  } catch(err) { Logger.log('scheduleHighlightPush_ 失敗：' + err.message); }
-}
-
-function pushHighlightPending_() {
-  // 清除自己（避免殘留 trigger）
-  var props = PropertiesService.getScriptProperties();
+  // 先清光所有同名 trigger（不依賴 ID，防止殘留累積）
   try {
     ScriptApp.getProjectTriggers().forEach(function(t) {
       if (t.getHandlerFunction() === 'pushHighlightPending_') ScriptApp.deleteTrigger(t);
     });
   } catch(e) {}
-  props.deleteProperty('PENDING_HL_TRIGGER');
+  // 建新 trigger：從現在起 65 秒後執行（GAS 最小精度約 1 分鐘）
+  try {
+    var when = new Date(Date.now() + 65000);
+    ScriptApp.newTrigger('pushHighlightPending_').timeBased().at(when).create();
+    Logger.log('已安排 Highlight 推播：' + when.toISOString());
+  } catch(err) { Logger.log('scheduleHighlightPush_ 失敗：' + err.message); }
+}
+
+function pushHighlightPending_() {
+  // 清除所有同名 trigger（自己 + 任何殘留）
+  try {
+    ScriptApp.getProjectTriggers().forEach(function(t) {
+      if (t.getHandlerFunction() === 'pushHighlightPending_') ScriptApp.deleteTrigger(t);
+    });
+  } catch(e) {}
   // 推更新版 Highlight
   try {
     var hlFlex = buildRefreshedHighlightFlex_();
