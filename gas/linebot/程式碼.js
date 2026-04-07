@@ -1,10 +1,9 @@
-// LINE Bot v2.6 - 全時段自動回覆 + 統一 Push 備查（移除收發文自動化）
+// LINE Bot v2.5 - 收發文自動化 + 全時段自動回覆 + 統一 Push 備查
 // v2.0→v2.1: isDuplicate 改為只擋同用戶同內容重複訊息，不擋連續不同訊息
 // v2.1→v2.2: 黑名單過濾垃圾訊息 + 備查顯示 userId
 // v2.2→v2.3: 律師 LINE 指令封鎖垃圾用戶（封鎖+名字 → 查 Notion → blockUser）
 // v2.3→v2.4: 收發文自動化（file message → Drive 上傳 + Claude 辨識 + 擬稿 + 律師審核）
 // v2.4→v2.5: 收發文 bug fix（律師限定）+ Claude 動態擬稿 + 草稿獨立泡泡
-// v2.5→v2.6: 移除收發文自動化，file type 恢復原始 fallback 行為
 // 2026-04-06
 
 // ⚠️ 不要跑 setupAllProperties — Script Properties 已手動設定好
@@ -51,15 +50,89 @@ function doPost(e){
       var msg=events[i].message;
       var srcUserId=events[i].source.userId;
       var lawyerId=CONFIG.LAWYER_LINE_USER_ID;
+      var scriptProps=PropertiesService.getScriptProperties();
 
-      // 律師文字指令
+      // ===== 人工接管機制 =====
+      // 追蹤最近發訊的非律師用戶（只追蹤文字訊息）
+      if(srcUserId!==lawyerId&&msg&&msg.type==='text'){
+        scriptProps.setProperty('last_message_user_id',srcUserId);
+      }
+
+      // 律師接管指令：0/1/00/11（在律師其他指令前處理）
+      if(msg&&msg.type==='text'&&srcUserId===lawyerId&&lawyerId!==''){
+        var takeoverCmd=msg.text.trim();
+        if(takeoverCmd==='0'){
+          var lastUser=scriptProps.getProperty('last_message_user_id');
+          if(lastUser){
+            scriptProps.setProperty('takeover_'+lastUser,String(Date.now()+2*60*60*1000));
+            scriptProps.setProperty('last_paused_user_id',lastUser);
+            Logger.log('接管：暫停用戶 '+lastUser+' 2小時');
+          }
+          continue;
+        }
+        if(takeoverCmd==='1'){
+          var lastPaused=scriptProps.getProperty('last_paused_user_id');
+          if(lastPaused){scriptProps.deleteProperty('takeover_'+lastPaused);}
+          Logger.log('接管：恢復用戶 '+lastPaused);
+          continue;
+        }
+        if(takeoverCmd==='00'){
+          scriptProps.setProperty('takeover_global',String(Date.now()+2*60*60*1000));
+          Logger.log('接管：全域暫停 2小時');
+          continue;
+        }
+        if(takeoverCmd==='11'){
+          var allProps=scriptProps.getProperties();
+          Object.keys(allProps).filter(function(k){return k.indexOf('takeover_')===0;}).forEach(function(k){scriptProps.deleteProperty(k);});
+          scriptProps.deleteProperty('last_paused_user_id');
+          Logger.log('接管：全域恢復，清除所有暫停');
+          continue;
+        }
+      }
+      // ===== 人工接管機制 END =====
+
+      // 檔案訊息：僅律師走收發文流程，非律師回 fallback
+      if(msg&&msg.type==='file'){
+        if(srcUserId===lawyerId){
+          handleFileMessage_(events[i]);
+        }else if(!isBlockedUser_(srcUserId)){
+          replyToLine_(events[i].replyToken,'您好，目前僅支援文字訊息的自動處理。\n\n如有法律問題，歡迎直接用文字描述您的狀況，律師會儘快回覆您。',CONFIG);
+        }
+        continue;
+      }
+
+      // 律師文字指令（封鎖/送出/改）
       if(msg&&msg.type==='text'&&srcUserId===lawyerId){
         var txt=msg.text.trim();
         if(txt.indexOf('封鎖')===0){
           var targetName=txt.substring(2).trim();
           if(targetName){handleBlockCommand_(events[i].replyToken,targetName);continue;}
         }
+        if(txt==='送出'){handleSendCommand_(events[i].replyToken);continue;}
+        if(txt.indexOf('改 ')===0){
+          var editInstruction=txt.substring(2).trim();
+          if(editInstruction){handleEditCommand_(events[i].replyToken,editInstruction);continue;}
+        }
+        // 律師發的其他訊息不觸發自動回覆
+        continue;
       }
+
+      // ===== 接管暫停檢查 =====
+      var globalExpiry=scriptProps.getProperty('takeover_global');
+      if(globalExpiry&&Date.now()<Number(globalExpiry)){
+        Logger.log('全域接管中，略過自動回覆：'+srcUserId);
+        continue;
+      }else if(globalExpiry){
+        scriptProps.deleteProperty('takeover_global');
+      }
+      var userExpiry=scriptProps.getProperty('takeover_'+srcUserId);
+      if(userExpiry&&Date.now()<Number(userExpiry)){
+        Logger.log('用戶接管中，略過自動回覆：'+srcUserId);
+        continue;
+      }else if(userExpiry){
+        scriptProps.deleteProperty('takeover_'+srcUserId);
+      }
+      // ===== 接管暫停檢查 END =====
 
       processMessageEvent_(events[i]);
     }
@@ -550,9 +623,11 @@ function listBlockedUsers(){
   else{Logger.log('共'+list.length+'筆封鎖：\n'+list.join('\n'));}
 }
 
-// ===== （收發文自動化已於 v2.6 移除）=====
-// 如需恢復，從 git 取回 v2.5 版本。
-// function handleFileMessage_(event){
+// ===== 收發文自動化 =====
+// Drive 資料夾 ID：100.收發文 (1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b)
+var MAIL_FOLDER_ID_='1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b';
+
+function handleFileMessage_(event){
   var CONFIG=getConfig_();
   var messageId=event.message.id;
   var fileName=event.message.fileName||('doc_'+messageId+'.pdf');
