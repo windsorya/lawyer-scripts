@@ -190,24 +190,51 @@ function sendMorningBriefing() {
   }
 
   var healthResult = getHealthStatus(today);
+
+  // 睡眠數據未同步 → 延後整則晨報，用獨立的 retryMorningBriefing 避免跟固定排程 trigger 混淆
+  if (healthResult.sleepMissing) {
+    var retryCount = parseInt(PropertiesService.getScriptProperties().getProperty('BRIEFING_RETRY_COUNT') || '0');
+    if (retryCount < 3) {
+      PropertiesService.getScriptProperties().setProperty('BRIEFING_RETRY_COUNT', String(retryCount + 1));
+      var retryTime = new Date(new Date().getTime() + 5 * 60 * 1000);
+      ScriptApp.newTrigger('retryMorningBriefing')
+        .timeBased()
+        .at(retryTime)
+        .create();
+      Logger.log('睡眠數據未同步，延後晨報第 ' + (retryCount + 1) + ' 次（5分鐘後 retryMorningBriefing）');
+      // 第一次延後時推送簡短提示
+      if (retryCount === 0) {
+        try {
+          sendLinePush_([{ type: 'text', text: '⏳ 睡眠數據尚未同步，晨報延後 5 分鐘發送。\n請開啟 Health Auto Export 同步一下。' }]);
+        } catch (e) { Logger.log('提示推送失敗：' + e.message); }
+      }
+      return; // 不發晨報，等重試
+    } else {
+      // 重試 3 次仍無睡眠，放棄等待，發沒有睡眠的版本
+      Logger.log('睡眠數據重試已達 3 次上限，發送不含睡眠的晨報');
+      PropertiesService.getScriptProperties().deleteProperty('BRIEFING_RETRY_COUNT');
+    }
+  } else {
+    // 有睡眠數據（或不需要重試），清除計數器
+    PropertiesService.getScriptProperties().deleteProperty('BRIEFING_RETRY_COUNT');
+  }
+
   message += '\n🧘 【身心狀態】\n' + healthResult.display;
   if (healthResult.isFallback) message += '（注：以上為昨日數據，今日數據同步後將補發）\n';
   message += '\n━━━━━━━━━━━━━━\n';
   message += '💡 今日開庭準備 → https://claude.ai/new?q=今日開庭準備\n';
   message += '💡 領今日身心處方 → https://claude.ai/new?q=' + healthResult.prompt;
 
-  // 若拿到的是昨天的數據，建立 09:00 一次性 trigger 補發今日健康段落
   if (healthResult.isFallback) {
     try {
       var nine = new Date(today);
-      nine.setHours(9, 0, 0, 0);
-      // 若已過 09:00，不建立（避免 trigger 立刻觸發造成混亂）
+      nine.setHours(12, 0, 0, 0);
       if (nine.getTime() > new Date().getTime()) {
         ScriptApp.newTrigger('sendHealthSupplement')
           .timeBased()
           .at(nine)
           .create();
-        Logger.log('已建立 09:00 健康數據補發 trigger');
+        Logger.log('已建立 12:00 健康數據補發 trigger');
       }
     } catch (trigErr) { Logger.log('建立補發 trigger 失敗：' + trigErr.message); }
   }
@@ -522,7 +549,7 @@ function getFamilyEvents(today, courtEvents, lawyerEvents) {
 
 // ======================== 身心狀態模組 ========================
 
-// 補發今日健康數據（由 sendMorningBriefing 在 fallback 時建立的 09:00 一次性 trigger 呼叫）
+// 補發今日健康數據（由 sendMorningBriefing 在 fallback 時建立的 12:00 一次性 trigger 呼叫）
 function sendHealthSupplement() {
   // Step 1：清除自己的 trigger，避免重複觸發
   try {
@@ -541,7 +568,7 @@ function sendHealthSupplement() {
     var ts = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
     var td = readHealthSheet_(ts);
     if (!td) {
-      Logger.log('sendHealthSupplement：09:00 仍無今日數據，略過補發');
+      Logger.log('sendHealthSupplement：12:00 仍無今日數據，略過補發');
       return;
     }
 
@@ -560,25 +587,95 @@ function sendHealthSupplement() {
   }
 }
 
+function retryMorningBriefing() {
+  // Step 1：清除自己的 trigger
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    for (var i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === 'retryMorningBriefing') {
+        ScriptApp.deleteTrigger(triggers[i]);
+      }
+    }
+  } catch (te) { Logger.log('清除 retryMorningBriefing trigger 失敗：' + te.message); }
+
+  var retryCount = parseInt(PropertiesService.getScriptProperties().getProperty('BRIEFING_RETRY_COUNT') || '0');
+
+  try {
+    var today = new Date();
+    var ts = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
+
+    // 清除 health file cache，強制重讀（檔案內容可能已更新）
+    try { PropertiesService.getScriptProperties().deleteProperty('HEALTH_F_HealthMetrics-' + ts); } catch(e) {}
+
+    var td = readHealthSheet_(ts);
+    var pf = function(k){ var v = parseFloat((td||{})[k]); return isNaN(v) ? null : v; };
+    var hasSleep = pf('睡眠分析 [睡眠時間] (hr)') || pf('睡眠分析 [Total] (hr)');
+
+    if (!hasSleep && retryCount < 3) {
+      // 仍無睡眠，繼續重試
+      PropertiesService.getScriptProperties().setProperty('BRIEFING_RETRY_COUNT', String(retryCount + 1));
+      var retryTime = new Date(new Date().getTime() + 5 * 60 * 1000);
+      ScriptApp.newTrigger('retryMorningBriefing')
+        .timeBased()
+        .at(retryTime)
+        .create();
+      Logger.log('睡眠數據仍未同步，第 ' + retryCount + ' 次重試後再設 trigger（第 ' + (retryCount + 1) + ' 次）');
+      return;
+    }
+
+    // 走到這裡：要嘛睡眠到了，要嘛重試已達上限
+    PropertiesService.getScriptProperties().deleteProperty('BRIEFING_RETRY_COUNT');
+
+    if (!hasSleep) {
+      Logger.log('睡眠數據重試已達 3 次上限，發送不含睡眠的晨報');
+    } else {
+      Logger.log('睡眠數據已同步，發送完整晨報');
+    }
+
+    // 呼叫原本的 sendMorningBriefing 發送完整晨報
+    sendMorningBriefing();
+
+  } catch (err) {
+    Logger.log('retryMorningBriefing 執行失敗：' + err.message);
+    PropertiesService.getScriptProperties().deleteProperty('BRIEFING_RETRY_COUNT');
+    // 失敗了還是發一版晨報，不要讓律師什麼都收不到
+    try { sendMorningBriefing(); } catch(e2) { Logger.log('fallback sendMorningBriefing 也失敗：' + e2.message); }
+  }
+}
+
 function getHealthStatus(today) {
-  var fallback = { display: '尚無健康數據（Health Auto Export 尚未同步）\n', prompt: '充電', isFallback: false };
+  var fallback = { display: '尚無健康數據（Health Auto Export 尚未同步）\n', prompt: '充電', isFallback: false, sleepMissing: false };
   try {
     var ts = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
     var td = readHealthSheet_(ts);
+
+    // 同時讀取昨日檔案作為 yd
+    var y = new Date(today); y.setDate(y.getDate() - 1);
+    var ys = Utilities.formatDate(y, 'Asia/Taipei', 'yyyy-MM-dd');
+    var yd = readHealthSheet_(ys) || {};
+
     if (!td) {
-      // Fallback: try yesterday
-      var y = new Date(today); y.setDate(y.getDate()-1);
-      var ys = Utilities.formatDate(y, 'Asia/Taipei', 'yyyy-MM-dd');
-      td = readHealthSheet_(ys);
-      if (!td) return fallback;
-      var result = buildHealthDisplay_(td, {});
-      result.isFallback = true;  // 昨天的數據
+      // 今日檔案不存在，用昨日檔案當 td
+      if (!yd || Object.keys(yd).length === 0) return fallback;
+      var result = buildHealthDisplay_(yd, {});
+      result.isFallback = true;
+      result.sleepMissing = false;
       return result;
     }
-    var result = buildHealthDisplay_(td, {});
-    result.isFallback = false;  // 今天的數據
+
+    var result = buildHealthDisplay_(td, yd);
+    result.isFallback = false;
+
+    // 檢查：今日檔案有步數但睡眠為空 → Health Auto Export 尚未同步睡眠
+    var pf = function(k){ var v = parseFloat(td[k]); return isNaN(v) ? null : v; };
+    var hasSleep = pf('睡眠分析 [睡眠時間] (hr)') || pf('睡眠分析 [Total] (hr)');
+    var hasSteps = pf('步數 (步)');
+    result.sleepMissing = (!hasSleep && !!hasSteps);
     return result;
-  } catch (err) { Logger.log('讀取健康數據錯誤：' + err.message); return { display: '健康數據讀取失敗\n', prompt: '充電', isFallback: false }; }
+  } catch (err) {
+    Logger.log('讀取健康數據錯誤：' + err.message);
+    return { display: '健康數據讀取失敗\n', prompt: '充電', isFallback: false, sleepMissing: false };
+  }
 }
 
 // 讀取指定日期的健康指標。
