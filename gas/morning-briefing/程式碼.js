@@ -95,7 +95,30 @@ function truncateLabel_(text, maxLen) {
 
 // ======================== 主程式 ========================
 
+/**
+ * 確保晨報觸發器存在。每次 sendMorningBriefing 執行時先呼叫。
+ * 如果觸發器被意外刪除，自動重建（每日 08:00 Asia/Taipei）。
+ */
+function ensureMorningBriefingTrigger_() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var hasMorningTrigger = triggers.some(function(t) {
+    return t.getHandlerFunction() === 'sendMorningBriefing' &&
+           t.getTriggerSource() === ScriptApp.TriggerSource.CLOCK;
+  });
+  if (!hasMorningTrigger) {
+    Logger.log('⚠️ 晨報觸發器不存在，自動重建...');
+    ScriptApp.newTrigger('sendMorningBriefing')
+      .timeBased()
+      .atHour(8)
+      .everyDays(1)
+      .inTimezone('Asia/Taipei')
+      .create();
+    Logger.log('✅ 晨報觸發器已重建：每日 08:00 Asia/Taipei');
+  }
+}
+
 function sendMorningBriefing() {
+  try { ensureMorningBriefingTrigger_(); } catch(e) { Logger.log('Morning trigger check failed: ' + e); }
   try { ensureConsultationFollowupTrigger_(); } catch(e) { Logger.log('Trigger check failed: ' + e); }
   try { ensureAutoCourtPrepTrigger_(); } catch(e) { Logger.log('autoCourtPrep trigger: ' + e); }
   try {
