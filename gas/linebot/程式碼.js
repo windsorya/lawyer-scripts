@@ -8,6 +8,8 @@
 
 // ⚠️ 不要跑 setupAllProperties — Script Properties 已手動設定好
 // 此函式僅用於檢查目前的 properties 是否齊全
+// 臨時函式：設定律師個人 LINE userId（用完即刪）
+
 function checkProperties(){
   var p=PropertiesService.getScriptProperties();
   var keys=['LINE_CHANNEL_ACCESS_TOKEN','LINE_CHANNEL_SECRET','ANTHROPIC_API_KEY','LAWYER_LINE_USER_ID','NOTION_API_KEY','NOTION_DB_ID'];
