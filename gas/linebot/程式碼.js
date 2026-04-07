@@ -66,21 +66,12 @@ function doPost(e){
         if(takeoverCmd==='0'||takeoverCmd.indexOf('0 ')===0){
           var targetUserId=null,targetName=null;
           if(takeoverCmd.indexOf('0 ')===0){
-            // 按姓名暫停：查 user_name_cache 模糊比對
-            var nameQuery=takeoverCmd.substring(2).trim().toLowerCase();
-            try{
-              var nc=JSON.parse(scriptProps.getProperty('user_name_cache')||'{}');
-              var matched=Object.keys(nc).filter(function(n){return n.toLowerCase().indexOf(nameQuery)>=0;});
-              if(matched.length===1){
-                targetUserId=nc[matched[0]];targetName=matched[0];
-              }else if(matched.length>1){
-                pushToLawyer_('⚠️ 找到多個符合「'+nameQuery+'」的用戶：\n'+matched.slice(0,5).join('\n')+'\n\n請輸入更精確的名字',CONFIG);
-                continue;
-              }else{
-                pushToLawyer_('⚠️ 找不到「'+nameQuery+'」，請確認拼字或等對方發一則訊息後再試',CONFIG);
-                continue;
-              }
-            }catch(e){pushToLawyer_('⚠️ cache 查詢失敗：'+e,CONFIG);continue;}
+            // 按姓名暫停：cache → Notion fallback
+            var nameQuery=takeoverCmd.substring(2).trim();
+            var found0=findUserByName_(nameQuery,CONFIG);
+            if(!found0){pushToLawyer_('⚠️ 找不到「'+nameQuery+'」（cache 和 Notion 都查無此人）',CONFIG);continue;}
+            if(found0.multiple){pushToLawyer_('⚠️ 找到多個符合「'+nameQuery+'」的用戶：\n'+found0.list.join('\n')+'\n\n請輸入更精確的名字',CONFIG);continue;}
+            targetUserId=found0.userId;targetName=found0.name;
           }else{
             // 按最近發訊用戶暫停
             targetUserId=scriptProps.getProperty('last_message_user_id');
@@ -102,21 +93,12 @@ function doPost(e){
         if(takeoverCmd==='1'||takeoverCmd.indexOf('1 ')===0){
           var resumeUserId=null,resumeName=null;
           if(takeoverCmd.indexOf('1 ')===0){
-            // 按姓名恢復
-            var resumeQuery=takeoverCmd.substring(2).trim().toLowerCase();
-            try{
-              var rnc=JSON.parse(scriptProps.getProperty('user_name_cache')||'{}');
-              var rmatched=Object.keys(rnc).filter(function(n){return n.toLowerCase().indexOf(resumeQuery)>=0;});
-              if(rmatched.length===1){
-                resumeUserId=rnc[rmatched[0]];resumeName=rmatched[0];
-              }else if(rmatched.length>1){
-                pushToLawyer_('⚠️ 找到多個符合「'+resumeQuery+'」的用戶：\n'+rmatched.slice(0,5).join('\n')+'\n\n請輸入更精確的名字',CONFIG);
-                continue;
-              }else{
-                pushToLawyer_('⚠️ 找不到「'+resumeQuery+'」',CONFIG);
-                continue;
-              }
-            }catch(e){pushToLawyer_('⚠️ cache 查詢失敗：'+e,CONFIG);continue;}
+            // 按姓名恢復：cache → Notion fallback
+            var resumeQuery=takeoverCmd.substring(2).trim();
+            var found1=findUserByName_(resumeQuery,CONFIG);
+            if(!found1){pushToLawyer_('⚠️ 找不到「'+resumeQuery+'」（cache 和 Notion 都查無此人）',CONFIG);continue;}
+            if(found1.multiple){pushToLawyer_('⚠️ 找到多個符合「'+resumeQuery+'」的用戶：\n'+found1.list.join('\n')+'\n\n請輸入更精確的名字',CONFIG);continue;}
+            resumeUserId=found1.userId;resumeName=found1.name;
           }else{
             // 恢復最後一個被暫停的用戶
             resumeUserId=scriptProps.getProperty('last_paused_user_id');
@@ -315,6 +297,41 @@ function mergeRecentMessages_(userId,currentMessage){
     cache.put(key,currentMessage,300);
   }
   return merged;
+}
+
+// ===== 按姓名查 userId（cache → Notion fallback）=====
+// 回傳 {userId, name} / {multiple:true, list:[...]} / null
+function findUserByName_(nameQuery,config){
+  var q=nameQuery.toLowerCase();
+  // Step 1: 查本機 cache
+  try{
+    var nc=JSON.parse(PropertiesService.getScriptProperties().getProperty('user_name_cache')||'{}');
+    var matched=Object.keys(nc).filter(function(n){return n.toLowerCase().indexOf(q)>=0;});
+    if(matched.length===1)return{userId:nc[matched[0]],name:matched[0]};
+    if(matched.length>1)return{multiple:true,list:matched.slice(0,5)};
+  }catch(e){}
+  // Step 2: fallback 查 Notion
+  if(!config.NOTION_API_KEY||!config.NOTION_DB_ID)return null;
+  try{
+    var payload={filter:{property:'標題',title:{contains:nameQuery}},
+      sorts:[{property:'時間戳',direction:'descending'}],page_size:10};
+    var resp=UrlFetchApp.fetch('https://api.notion.com/v1/databases/'+config.NOTION_DB_ID+'/query',{
+      method:'post',
+      headers:{'Authorization':'Bearer '+config.NOTION_API_KEY,'Content-Type':'application/json','Notion-Version':'2022-06-28'},
+      payload:JSON.stringify(payload),muteHttpExceptions:true});
+    var pages=(JSON.parse(resp.getContentText()).results)||[];
+    var found={};
+    pages.forEach(function(p){
+      var uid=((p.properties['LINE User ID'].rich_text||[])[0]||{}).plain_text||'';
+      var t=((p.properties['標題'].title||[])[0]||{}).plain_text||'';
+      var name=t.replace(/\s\d{4}-\d{2}-\d{2}$/,'');
+      if(uid&&name)found[uid]=name;
+    });
+    var uids=Object.keys(found);
+    if(uids.length===1)return{userId:uids[0],name:found[uids[0]]};
+    if(uids.length>1)return{multiple:true,list:Object.values(found).slice(0,5)};
+  }catch(e){Logger.log('Notion name lookup error: '+e);}
+  return null;
 }
 
 // ===== 回頭客偵測（查 Notion）=====
