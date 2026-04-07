@@ -1056,13 +1056,48 @@ function handleTaskAction_(replyToken, data) {
   // Reply 只送確認文字（快速，避免 reply token 過期）
   sendLineReply_(replyToken, [{type:'text', text: result.msg}]);
 
-  // 完成任務後，另用 Push 送更新版 Highlight 選單（不依賴 reply token，不會超時）
-  if (action === 'done' && result.ok) {
+  // 任何操作成功後，用 debounce 延遲推 Highlight（避免多次操作時每次都打斷畫面）
+  if (result.ok) scheduleHighlightPush_();
+}
+
+// Debounce：任務操作後延遲 ~1 分鐘才推 Highlight，避免多次連點時每次都打斷畫面
+// 每次呼叫都會取消舊的 trigger，重設新的（從最後一次操作起算 1 分鐘）
+function scheduleHighlightPush_() {
+  var props = PropertiesService.getScriptProperties();
+  // 刪除舊的 pending trigger
+  var existingId = props.getProperty('PENDING_HL_TRIGGER');
+  if (existingId) {
     try {
-      var hlFlex = buildRefreshedHighlightFlex_();
-      sendLinePush_([hlFlex]);
-    } catch(hlErr) { Logger.log('buildRefreshedHighlightFlex_ 失敗：' + hlErr.message); }
+      ScriptApp.getProjectTriggers().forEach(function(t) {
+        if (t.getUniqueId() === existingId) ScriptApp.deleteTrigger(t);
+      });
+    } catch(e) {}
+    props.deleteProperty('PENDING_HL_TRIGGER');
   }
+  // 建新 trigger：從現在起 65 秒後執行（GAS 最小精度約 1 分鐘）
+  try {
+    var when = new Date(Date.now() + 65000);
+    var trigger = ScriptApp.newTrigger('pushHighlightPending_').timeBased().at(when).create();
+    props.setProperty('PENDING_HL_TRIGGER', trigger.getUniqueId());
+    Logger.log('已安排 Highlight 推播：' + when.toISOString());
+  } catch(err) { Logger.log('scheduleHighlightPush_ 失敗：' + err.message); }
+}
+
+function pushHighlightPending_() {
+  // 清除自己（避免殘留 trigger）
+  var props = PropertiesService.getScriptProperties();
+  try {
+    ScriptApp.getProjectTriggers().forEach(function(t) {
+      if (t.getHandlerFunction() === 'pushHighlightPending_') ScriptApp.deleteTrigger(t);
+    });
+  } catch(e) {}
+  props.deleteProperty('PENDING_HL_TRIGGER');
+  // 推更新版 Highlight
+  try {
+    var hlFlex = buildRefreshedHighlightFlex_();
+    sendLinePush_([hlFlex]);
+    Logger.log('Highlight debounce 推播完成');
+  } catch(err) { Logger.log('pushHighlightPending_ 失敗：' + err.message); }
 }
 
 // 完成任務後重新產出 Highlight flex（重新抓 Notion todos，已完成的已被 checkbox filter 排除）
