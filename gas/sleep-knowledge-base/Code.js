@@ -391,3 +391,175 @@ function runDryRun() {
   extractChapterNames(true);
   SpreadsheetApp.getUi().alert('dryRun 完成，請開啟 View → Logs 查看提取結果。');
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// injectToNotion — 從 Drive .md 全文灌進 Notion 頁面
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 從 Drive 讀取 .md 全文，寫入對應的 Notion 頁面內容
+ * @param {string} driveFileId - Drive .md 檔案 ID
+ * @param {string} notionPageId - Notion 頁面 ID
+ */
+function injectOneToNotion(driveFileId, notionPageId) {
+  var token = PropertiesService.getScriptProperties().getProperty('NOTION_TOKEN');
+  if (!token) throw new Error('NOTION_TOKEN not set in Script Properties');
+
+  var file = DriveApp.getFileById(driveFileId);
+  var content = file.getBlob().getDataAsString('UTF-8');
+  var fileName = file.getName();
+  Logger.log('Read: ' + fileName + ' (' + content.length + ' chars)');
+
+  var blocks = splitToNotionBlocks(content);
+  var url = 'https://api.notion.com/v1/blocks/' + notionPageId + '/children';
+
+  for (var i = 0; i < blocks.length; i += 100) {
+    var batch = blocks.slice(i, i + 100);
+    var response = UrlFetchApp.fetch(url, {
+      method: 'patch',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28'
+      },
+      payload: JSON.stringify({ children: batch }),
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      Logger.log('ERROR batch ' + (Math.floor(i / 100) + 1) + ': ' +
+        response.getResponseCode() + ' ' + response.getContentText().substring(0, 500));
+      return false;
+    }
+    Logger.log('Batch ' + (Math.floor(i / 100) + 1) + ' OK (' + batch.length + ' blocks)');
+    Utilities.sleep(350);
+  }
+
+  Logger.log('✅ Injected: ' + fileName + ' → Notion ' + notionPageId);
+  return true;
+}
+
+/**
+ * 將 markdown 文本分割成 Notion paragraph/heading blocks
+ * 每段 < 1800 chars（Notion rich_text 單段上限 2000）
+ */
+function splitToNotionBlocks(markdown) {
+  var lines = markdown.split('\n');
+  var blocks = [];
+  var buffer = '';
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+
+    if (buffer.length + line.length + 1 > 1800 && buffer.length > 0) {
+      blocks.push(makeTextBlock(buffer));
+      buffer = '';
+    }
+
+    if (line.match(/^### /)) {
+      if (buffer.length > 0) { blocks.push(makeTextBlock(buffer)); buffer = ''; }
+      blocks.push({ type: 'heading_3', heading_3: { rich_text: [{ type: 'text', text: { content: line.replace(/^### /, '') } }] } });
+    } else if (line.match(/^## /)) {
+      if (buffer.length > 0) { blocks.push(makeTextBlock(buffer)); buffer = ''; }
+      blocks.push({ type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: line.replace(/^## /, '') } }] } });
+    } else if (line.match(/^# /)) {
+      if (buffer.length > 0) { blocks.push(makeTextBlock(buffer)); buffer = ''; }
+      blocks.push({ type: 'heading_1', heading_1: { rich_text: [{ type: 'text', text: { content: line.replace(/^# /, '') } }] } });
+    } else if (line.trim() === '' && buffer.length > 0) {
+      blocks.push(makeTextBlock(buffer));
+      buffer = '';
+    } else {
+      buffer += (buffer.length > 0 ? '\n' : '') + line;
+    }
+  }
+  if (buffer.length > 0) blocks.push(makeTextBlock(buffer));
+
+  return blocks;
+}
+
+function makeTextBlock(text) {
+  if (text.length > 2000) text = text.substring(0, 1997) + '...';
+  return {
+    type: 'paragraph',
+    paragraph: { rich_text: [{ type: 'text', text: { content: text } }] }
+  };
+}
+
+/**
+ * 測試：灌 3 筆到 Notion
+ * Drive ID 對應到 Notion 頁面
+ */
+function injectTestThree() {
+  var testCases = [
+    { drive: '1iaVGfHYP_Wn-FGO1RG4-lu-ziQ0QmA5l', notion: '33be22f21ca4816f999dee0ae3a6b320' },
+    { drive: '1O4oUjCO84D8TnW-U5QWQSQGNj7Vlyuzk', notion: '33be22f21ca481c79693ee2a77245666' },
+    { drive: '1439JNZozJauyTiG8J8OerXO3qhv86DVH', notion: '33be22f21ca481268135f411f9838894' }
+  ];
+
+  for (var i = 0; i < testCases.length; i++) {
+    var tc = testCases[i];
+    Logger.log('--- Test ' + (i + 1) + '/3 ---');
+    try {
+      injectOneToNotion(tc.drive, tc.notion);
+    } catch (e) {
+      Logger.log('FAIL: ' + e.message);
+    }
+    Utilities.sleep(500);
+  }
+  Logger.log('=== Test complete ===');
+}
+
+/**
+ * 灌全部 238 筆（從 Notion DB 查詢所有頁面的 Drive檔案ID）
+ * 每頁讀 Drive .md → append blocks 到對應 Notion 頁面
+ */
+function injectAll() {
+  var token = PropertiesService.getScriptProperties().getProperty('NOTION_TOKEN');
+  var dbId = 'b1be855c33b3401b993a4a2458adb94e';
+  var hasMore = true;
+  var startCursor = null;
+  var total = 0, success = 0, fail = 0;
+
+  while (hasMore) {
+    var body = { page_size: 100 };
+    if (startCursor) body.start_cursor = startCursor;
+
+    var resp = UrlFetchApp.fetch('https://api.notion.com/v1/databases/' + dbId + '/query', {
+      method: 'post',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28'
+      },
+      payload: JSON.stringify(body),
+      muteHttpExceptions: true
+    });
+
+    var data = JSON.parse(resp.getContentText());
+    var pages = data.results || [];
+    hasMore = data.has_more || false;
+    startCursor = data.next_cursor || null;
+
+    for (var i = 0; i < pages.length; i++) {
+      var page = pages[i];
+      var driveId = '';
+      try {
+        driveId = page.properties['Drive檔案ID'].rich_text[0].plain_text;
+      } catch (e) { continue; }
+      if (!driveId) continue;
+
+      total++;
+      try {
+        injectOneToNotion(driveId, page.id);
+        success++;
+      } catch (e) {
+        Logger.log('FAIL page ' + page.id + ': ' + e.message);
+        fail++;
+      }
+      Utilities.sleep(400);
+    }
+  }
+
+  Logger.log('=== INJECT ALL COMPLETE ===');
+  Logger.log('Total: ' + total + ' | Success: ' + success + ' | Fail: ' + fail);
+}
