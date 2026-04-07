@@ -215,6 +215,7 @@ function sendMorningBriefing() {
   var lineMessages = buildTextMessages_(message);
 
   // 任務 Flex Carousel（Phase 1）：Notion 工作待辦 + GCal 行政待辦
+  var notionTodos = holidayMode ? [] : getNotionTodoCandidates_(today);
   var taskItems = collectTaskItems_(notionTodos, lawyerAdmin);
   if (taskItems.length > 0) {
     var carouselMsg = buildTaskFlexCarousel_(taskItems);
@@ -226,7 +227,6 @@ function sendMorningBriefing() {
     var familyEvts = getFamilyEvents(today, todayCourt, lawyerAll);
     hlCandidates = buildHolidayHighlightCandidates_(familyEvts);
   } else {
-    var notionTodos = getNotionTodoCandidates_(today);
     hlCandidates = buildHighlightCandidates_(todayCourt, lawyerDeadlines, consultations, lawyerAdmin, notionAlerts.todos, notionTodos);
   }
   var flexMsg = buildHighlightFlexMessage_(highlightEmpty, hlCandidates);
@@ -253,7 +253,7 @@ function getNotionTodoCandidates_(today) {
       muteHttpExceptions: true,
     });
     var data = JSON.parse(response.getContentText());
-    if (data.status && data.status !== 200) { Logger.log('Notion 待辦 API 錯誤：' + response.getContentText()); return results; }
+    if (!data.results || (data.status && data.status !== 200)) { Logger.log('Notion 待辦 API 錯誤：' + response.getContentText()); return results; }
 
     var todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
     var msPerDay = 86400000;
@@ -1052,7 +1052,38 @@ function handleTaskAction_(replyToken, data) {
     Logger.log('handleTaskAction_ 錯誤：' + err.message);
     result = { ok: false, msg: '❌ 操作失敗：' + err.message };
   }
-  sendLineReply_(replyToken, [{type:'text', text: result.msg}]);
+
+  // 完成任務後，附上更新後的 Highlight 選單（已完成的任務自動排除）
+  var msgs = [{type:'text', text: result.msg}];
+  if (action === 'done' && result.ok) {
+    try {
+      var hlFlex = buildRefreshedHighlightFlex_();
+      msgs.push(hlFlex);
+    } catch(hlErr) { Logger.log('buildRefreshedHighlightFlex_ 失敗：' + hlErr.message); }
+  }
+  sendLineReply_(replyToken, msgs);
+}
+
+// 完成任務後重新產出 Highlight flex（重新抓 Notion todos，已完成的已被 checkbox filter 排除）
+function buildRefreshedHighlightFlex_() {
+  var today = new Date();
+  var holidayMode = isHolidayMode_();
+  var hlEvents = getHighlightEvents(today);
+  var highlightEmpty = (hlEvents.length === 0);
+  var candidates;
+  if (holidayMode) {
+    candidates = buildHolidayHighlightCandidates_(getFamilyEvents(today, [], []));
+  } else {
+    var todayCourt    = sortEvents(getCourtEvents(today, 0));
+    var lawyerAll     = sortEvents(getLawyerDeadlineEvents(today));
+    var lawyerNL      = lawyerAll.filter(function(e){ return !isLeaveEvent(e.title) && !e.title.includes('陳律'); });
+    var lawyerDeadlines = lawyerNL.filter(function(e){ return e.title.startsWith('⏰'); });
+    var lawyerAdmin     = lawyerNL.filter(function(e){ return !e.title.startsWith('⏰'); });
+    var consultations = sortEvents(getConsultationEvents(today));
+    var notionTodos   = getNotionTodoCandidates_(today);  // 重新抓，checkbox:true 的已被 filter 排除
+    candidates = buildHighlightCandidates_(todayCourt, lawyerDeadlines, consultations, lawyerAdmin, [], notionTodos);
+  }
+  return buildHighlightFlexMessage_(highlightEmpty, candidates);
 }
 
 function notionCompleteTask_(pageId) {
@@ -1186,6 +1217,37 @@ function notionAddQuickTask_(title) {
 // ======================== 測試與觸發器 ========================
 
 function testBriefing(){sendMorningBriefing();}
+
+function diagBriefing() {
+  var steps = [];
+  try {
+    var today = new Date();
+    steps.push('1.start');
+
+    var lawyerAll = sortEvents(getLawyerDeadlineEvents(today));
+    steps.push('2.lawyer:' + lawyerAll.length);
+
+    var lawyerNonLeave = lawyerAll.filter(function(e){return !isLeaveEvent(e.title)&&!e.title.includes('陳律');});
+    var lawyerAdmin = lawyerNonLeave.filter(function(e){return !e.title.startsWith('⏰');});
+    steps.push('3.admin:' + lawyerAdmin.length);
+
+    var notionTodos = getNotionTodoCandidates_(today);
+    steps.push('4.notion:' + notionTodos.length);
+
+    var taskItems = collectTaskItems_(notionTodos, lawyerAdmin);
+    steps.push('5.tasks:' + taskItems.length);
+
+    var carousel = buildTaskFlexCarousel_(taskItems);
+    steps.push('6.carousel:' + (carousel ? 'ok' : 'null'));
+
+    sendLinePush_([{type:'text', text:'🩺 診斷完成\n' + steps.join('\n')}]);
+    steps.push('7.push:ok');
+  } catch(err) {
+    steps.push('ERR:' + err.message);
+    try { sendLinePush_([{type:'text', text:'🩺 診斷錯誤\n' + steps.join('\n') + '\n錯誤：' + err.message}]); } catch(e2) {}
+  }
+  return steps.join(' | ');
+}
 function setupDailyTrigger(){ScriptApp.getProjectTriggers().forEach(function(t){if(t.getHandlerFunction()==='sendMorningBriefing')ScriptApp.deleteTrigger(t);});ScriptApp.newTrigger('sendMorningBriefing').timeBased().atHour(8).everyDays(1).inTimezone('Asia/Taipei').create();Logger.log('✅ 已設定每日 08:00 觸發器');}
 function removeAllTriggers(){ScriptApp.getProjectTriggers().forEach(function(t){ScriptApp.deleteTrigger(t);});Logger.log('已移除所有觸發器');}
 function testHealthStatus(){var r=getHealthStatus(new Date());Logger.log('display:\n'+r.display);Logger.log('prompt:\n'+r.prompt);}
