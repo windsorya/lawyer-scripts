@@ -170,11 +170,6 @@ function sendMorningBriefing() {
   if (highlightEmpty) { message += '⚠️ 今日尚未設定 Highlight，建議現在設定一個最重要的任務。\n'; }
   else { highlightEvents.forEach(function(e) { message += formatEvent(e); }); }
 
-  if (lawyerAdmin.length > 0) {
-    message += hasLeave ? '\n📌 【今日行政待辦】⚠️ ' + leaveNames + '\n' : '\n📌 【今日行政待辦】\n';
-    lawyerAdmin.forEach(function(e) { message += formatEvent(e); });
-  }
-
   message += '\n🚨 【時效預警】\n';
   if (notionAlerts.deadlines.length === 0) { message += '目前無時效警示\n'; }
   else { notionAlerts.deadlines.forEach(function(d) { message += '▸ ' + d.emoji + ' ' + d.caseName + '｜剩 ' + d.daysLeft + ' 天（' + d.deadline + '）\n'; }); }
@@ -218,6 +213,13 @@ function sendMorningBriefing() {
   }
 
   var lineMessages = buildTextMessages_(message);
+
+  // 任務 Flex Carousel（Phase 1）：Notion 工作待辦 + GCal 行政待辦
+  var taskItems = collectTaskItems_(notionTodos, lawyerAdmin);
+  if (taskItems.length > 0) {
+    var carouselMsg = buildTaskFlexCarousel_(taskItems);
+    if (carouselMsg && lineMessages.length < 4) lineMessages.push(carouselMsg);
+  }
 
   var hlCandidates;
   if (holidayMode) {
@@ -289,7 +291,7 @@ function getNotionTodoCandidates_(today) {
         var suffix = '';
         if (daysUntilDue !== null && daysUntilDue < 0) suffix = '（逾期' + Math.abs(daysUntilDue) + '天）';
         else if (daysUntilDue !== null && daysUntilDue === 0) suffix = '（今日到期）';
-        results.push({ icon: icon, title: title, suffix: suffix, sortOrder: sortOrder, daysUntilDue: daysUntilDue !== null ? daysUntilDue : 999 });
+        results.push({ icon: icon, title: title, suffix: suffix, sortOrder: sortOrder, daysUntilDue: daysUntilDue !== null ? daysUntilDue : 999, pageId: page.id, dueDate: dueDate });
       }
     });
     results.sort(function(a, b) { return a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.daysUntilDue - b.daysUntilDue; });
@@ -737,7 +739,7 @@ function getLawyerDeadlineEvents(today) {
   var s=new Date(today);s.setHours(0,0,0,0); var e=new Date(today);e.setHours(23,59,59,999);
   try { var cal=CalendarApp.getCalendarById(CONFIG.LAWYER_CALENDAR_ID); if(!cal)return[]; var evts=cal.getEvents(s,e),r=[];
     evts.forEach(function(ev){if(shouldSkipCalendarEvent(ev))return;if(!isAllDayEventActiveOnDate(ev,today))return;var ad=ev.isAllDayEvent();
-      r.push({allDay:ad,time:ad?'':Utilities.formatDate(ev.getStartTime(),'Asia/Taipei','HH:mm'),title:ev.getTitle()});}); return r;
+      r.push({allDay:ad,time:ad?'':Utilities.formatDate(ev.getStartTime(),'Asia/Taipei','HH:mm'),title:ev.getTitle(),eventId:ev.getId()});}); return r;
   } catch(err){Logger.log('讀取律師行事曆錯誤：'+err.message);return[];}
 }
 
@@ -931,7 +933,14 @@ function sendLineReply_(rt,mo) {
 function doPost(e) {
   try{if(!e||!e.postData||!e.postData.contents)return ContentService.createTextOutput('OK');
     var body=JSON.parse(e.postData.contents);(body.events||[]).forEach(function(ev){
-      if(ev.type==='postback'&&ev.postback&&ev.postback.data){var d=ev.postback.data;if(d.indexOf('hl:')===0)handleHighlightSelection_(ev.replyToken,d.substring(3));}
+      if(ev.type==='postback'&&ev.postback&&ev.postback.data){
+        var d=ev.postback.data;
+        if(d.indexOf('hl:')===0) handleHighlightSelection_(ev.replyToken,d.substring(3));
+        else if(d.indexOf('task:')===0) handleTaskAction_(ev.replyToken,d);
+      }
+      if(ev.type==='message'&&ev.message&&ev.message.type==='text'&&ev.replyToken) {
+        handleMessageEvent_(ev.replyToken,ev.message.text);
+      }
     });}catch(err){Logger.log('doPost 錯誤：'+err.message);}
   return ContentService.createTextOutput('OK');
 }
@@ -943,6 +952,235 @@ function handleHighlightSelection_(rt,title) {
     if(!cal.getEvents(s,e).some(function(ev){return ev.getTitle()===title;}))cal.createAllDayEvent(title,today);ok=true;}
   }catch(err){Logger.log('建立 Highlight 事件錯誤：'+err.message);}
   sendLineReply_(rt,[{type:'text',text:ok?'⭐ 已設定 Highlight：\n'+title+'\n\n可繼續點選其他項目複選 💪':'❌ 設定失敗，請用 Claude 手動設定。'}]);
+}
+
+// ======================== 任務 Flex Carousel（Phase 1） ========================
+
+function collectTaskItems_(notionTodos, calAdminEvents) {
+  var items = [];
+  notionTodos.forEach(function(t) {
+    if (!t.pageId) return;
+    var dueTxt = '';
+    if (t.daysUntilDue < 0) dueTxt = '逾期' + Math.abs(t.daysUntilDue) + '天';
+    else if (t.daysUntilDue === 0) dueTxt = '今日到期';
+    else if (t.daysUntilDue < 999 && t.dueDate) dueTxt = t.dueDate;
+    items.push({ icon: t.icon, title: t.title, source: 'Notion', taskId: t.pageId,
+      dueTxt: dueTxt, sourceTxt: 'Notion待辦', sortOrder: t.sortOrder });
+  });
+  calAdminEvents.forEach(function(ev) {
+    if (!ev.eventId) return;
+    items.push({ icon: '📌', title: ev.title.replace(/^📌\s*/, ''), source: 'GCal', taskId: ev.eventId,
+      dueTxt: '今日', sourceTxt: '行事曆', sortOrder: 10 });
+  });
+  items.sort(function(a, b) { return a.sortOrder - b.sortOrder; });
+  return items;
+}
+
+function getPriorityColor_(icon) {
+  if (icon === '🔴') return '#DC2626';
+  if (icon === '📅') return '#D97706';
+  if (icon === '🔥') return '#9333EA';
+  if (icon === '🟡') return '#0891B2';
+  return '#4B5563';
+}
+
+function buildTaskFlexCarousel_(taskItems) {
+  var MAX_BUBBLES = 12;
+  var shown = taskItems.slice(0, MAX_BUBBLES);
+  var bubbles = shown.map(function(item) {
+    var doneData   = 'task:done:'   + item.source + ':' + item.taskId;
+    var snoozeData = 'task:snooze:' + item.source + ':' + item.taskId;
+    var delData    = 'task:del:'    + item.source + ':' + item.taskId;
+    if (doneData.length   > 295) doneData   = doneData.substring(0, 295);
+    if (snoozeData.length > 295) snoozeData = snoozeData.substring(0, 295);
+    if (delData.length    > 295) delData    = delData.substring(0, 295);
+    var titleTxt = item.title.length > 40 ? item.title.substring(0, 39) + '…' : item.title;
+    var subTxt   = item.sourceTxt + (item.dueTxt ? ' · ' + item.dueTxt : '');
+    var bgColor  = getPriorityColor_(item.icon);
+    var shortTitle = truncateLabel_(item.title, 20);
+    return {
+      type: 'bubble', size: 'kilo',
+      header: { type: 'box', layout: 'horizontal', backgroundColor: bgColor, paddingAll: '10px',
+        contents: [{ type: 'text', text: item.icon + ' ' + item.sourceTxt, size: 'xs', color: '#FFFFFF', weight: 'bold' }] },
+      body: { type: 'box', layout: 'vertical', paddingAll: '12px', spacing: 'sm',
+        contents: [
+          { type: 'text', text: titleTxt, weight: 'bold', size: 'sm', wrap: true, maxLines: 3, color: '#1C1917' },
+          { type: 'text', text: subTxt, size: 'xxs', color: '#78716C', margin: 'sm' }
+        ]},
+      footer: { type: 'box', layout: 'horizontal', spacing: 'sm', paddingAll: '8px',
+        contents: [
+          { type: 'button', style: 'primary', height: 'sm', flex: 1, color: '#16A34A',
+            action: { type: 'postback', label: '✅', data: doneData, displayText: '✅ 完成：' + shortTitle } },
+          { type: 'button', style: 'secondary', height: 'sm', flex: 1,
+            action: { type: 'postback', label: '⏰+1', data: snoozeData, displayText: '⏰ 延後：' + shortTitle } },
+          { type: 'button', style: 'secondary', height: 'sm', flex: 1,
+            action: { type: 'postback', label: '🗑', data: delData, displayText: '🗑 刪除：' + shortTitle } }
+        ]}
+    };
+  });
+  if (bubbles.length === 0) return null;
+  var altSuffix = taskItems.length > MAX_BUBBLES ? '（顯示前' + MAX_BUBBLES + '項）' : '';
+  return {
+    type: 'flex',
+    altText: '📋 今日 ' + taskItems.length + ' 項任務' + altSuffix,
+    contents: { type: 'carousel', contents: bubbles }
+  };
+}
+
+// ======================== 任務動作處理（Phase 2） ========================
+
+function handleTaskAction_(replyToken, data) {
+  var parts = data.split(':');
+  if (parts.length < 4) { sendLineReply_(replyToken, [{type:'text', text:'❌ 無效的任務指令'}]); return; }
+  var action = parts[1];
+  var source = parts[2];
+  var taskId = parts.slice(3).join(':');  // GCal ID 可能含冒號，重新合併
+  var result = { ok: false, msg: '❌ 操作失敗' };
+  try {
+    if (source === 'Notion') {
+      if (action === 'done')   result = notionCompleteTask_(taskId);
+      else if (action === 'snooze') result = notionSnoozeTask_(taskId);
+      else if (action === 'del')    result = notionDeleteTask_(taskId);
+    } else if (source === 'GCal') {
+      if (action === 'done')   result = gcalCompleteEvent_(taskId);
+      else if (action === 'snooze') result = gcalSnoozeEvent_(taskId);
+      else if (action === 'del')    result = gcalDeleteEvent_(taskId);
+    } else if (source === 'TickTick') {
+      result = { ok: false, msg: '⚠️ TickTick 暫無 API 整合，請手動處理' };
+    }
+  } catch(err) {
+    Logger.log('handleTaskAction_ 錯誤：' + err.message);
+    result = { ok: false, msg: '❌ 操作失敗：' + err.message };
+  }
+  sendLineReply_(replyToken, [{type:'text', text: result.msg}]);
+}
+
+function notionCompleteTask_(pageId) {
+  var resp = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
+    method: 'patch',
+    headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+    payload: JSON.stringify({ properties: { 'Checkbox': { checkbox: true } } }),
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() === 200) return { ok: true, msg: '✅ 已完成任務' };
+  return { ok: false, msg: '❌ 完成失敗：' + resp.getContentText().substring(0, 100) };
+}
+
+function notionSnoozeTask_(pageId) {
+  var newDate;
+  try {
+    var getResp = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
+      method: 'get',
+      headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY, 'Notion-Version': '2022-06-28' },
+      muteHttpExceptions: true
+    });
+    if (getResp.getResponseCode() === 200) {
+      var pageData = JSON.parse(getResp.getContentText());
+      var dp = pageData.properties && pageData.properties['Date'];
+      if (dp && dp.date && dp.date.start) {
+        var base = new Date(dp.date.start); base.setDate(base.getDate() + 1);
+        newDate = Utilities.formatDate(base, 'Asia/Taipei', 'yyyy-MM-dd');
+      }
+    }
+  } catch(e) {}
+  if (!newDate) {
+    var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    newDate = Utilities.formatDate(tomorrow, 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+  var resp = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
+    method: 'patch',
+    headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+    payload: JSON.stringify({ properties: { 'Date': { date: { start: newDate } } } }),
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() === 200) return { ok: true, msg: '⏰ 已延後至 ' + newDate };
+  return { ok: false, msg: '❌ 延後失敗：' + resp.getContentText().substring(0, 100) };
+}
+
+function notionDeleteTask_(pageId) {
+  var resp = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
+    method: 'patch',
+    headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+    payload: JSON.stringify({ archived: true }),
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() === 200) return { ok: true, msg: '🗑 已刪除任務' };
+  return { ok: false, msg: '❌ 刪除失敗：' + resp.getContentText().substring(0, 100) };
+}
+
+function gcalCompleteEvent_(eventId) {
+  try {
+    var cal = CalendarApp.getCalendarById(CONFIG.LAWYER_CALENDAR_ID);
+    var ev = cal.getEventById(eventId);
+    if (!ev) return { ok: false, msg: '❌ 找不到行事曆事件' };
+    var t = ev.getTitle();
+    if (!t.startsWith('✅')) ev.setTitle('✅ ' + t);
+    return { ok: true, msg: '✅ 已標記完成：' + t };
+  } catch(err) { return { ok: false, msg: '❌ 完成失敗：' + err.message }; }
+}
+
+function gcalSnoozeEvent_(eventId) {
+  try {
+    var cal = CalendarApp.getCalendarById(CONFIG.LAWYER_CALENDAR_ID);
+    var ev = cal.getEventById(eventId);
+    if (!ev) return { ok: false, msg: '❌ 找不到行事曆事件' };
+    var t = ev.getTitle();
+    if (ev.isAllDayEvent()) {
+      var nd = new Date(ev.getAllDayStartDate()); nd.setDate(nd.getDate() + 1);
+      ev.setAllDayDate(nd);
+      return { ok: true, msg: '⏰ 已延後至 ' + Utilities.formatDate(nd, 'Asia/Taipei', 'MM/dd') + '：' + t };
+    } else {
+      var ns = new Date(ev.getStartTime()); ns.setDate(ns.getDate() + 1);
+      var ne = new Date(ev.getEndTime()); ne.setDate(ne.getDate() + 1);
+      ev.setTime(ns, ne);
+      return { ok: true, msg: '⏰ 已延後至 ' + Utilities.formatDate(ns, 'Asia/Taipei', 'MM/dd HH:mm') + '：' + t };
+    }
+  } catch(err) { return { ok: false, msg: '❌ 延後失敗：' + err.message }; }
+}
+
+function gcalDeleteEvent_(eventId) {
+  try {
+    var cal = CalendarApp.getCalendarById(CONFIG.LAWYER_CALENDAR_ID);
+    var ev = cal.getEventById(eventId);
+    if (!ev) return { ok: false, msg: '❌ 找不到行事曆事件' };
+    var t = ev.getTitle();
+    ev.deleteEvent();
+    return { ok: true, msg: '🗑 已刪除：' + t };
+  } catch(err) { return { ok: false, msg: '❌ 刪除失敗：' + err.message }; }
+}
+
+// ======================== 快速新增任務（Phase 3） ========================
+
+function handleMessageEvent_(replyToken, text) {
+  var trimmed = (text || '').trim();
+  var isAdd = trimmed.indexOf('+') === 0 || trimmed.indexOf('新增 ') === 0 || trimmed.indexOf('新增') === 0;
+  if (!isAdd) {
+    sendLineReply_(replyToken, [{type:'text', text:'💡 輸入 +任務名稱 可快速新增待辦\n例如：+朱倖慧案做狀'}]);
+    return;
+  }
+  var title = trimmed.replace(/^\+\s*/, '').replace(/^新增\s*/, '').trim();
+  if (!title) { sendLineReply_(replyToken, [{type:'text', text:'❌ 請輸入任務名稱，例如：+朱倖慧案做狀'}]); return; }
+  var result = notionAddQuickTask_(title);
+  sendLineReply_(replyToken, [{type:'text', text: result.msg}]);
+}
+
+function notionAddQuickTask_(title) {
+  var today = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+  var resp = UrlFetchApp.fetch('https://api.notion.com/v1/pages', {
+    method: 'post',
+    headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+    payload: JSON.stringify({
+      parent: { database_id: CONFIG.TODO_DB_ID },
+      properties: {
+        'Title': { title: [{ text: { content: title } }] },
+        'Date': { date: { start: today } },
+        'Checkbox': { checkbox: false }
+      }
+    }),
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() === 200) return { ok: true, msg: '✅ 已新增待辦：' + title };
+  return { ok: false, msg: '❌ 新增失敗：' + resp.getContentText().substring(0, 100) };
 }
 
 // ======================== 測試與觸發器 ========================
