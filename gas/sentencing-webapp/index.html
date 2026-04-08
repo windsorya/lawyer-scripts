@@ -3,629 +3,1196 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>量刑分析系統 — 王志文律師</title>
+  <title>量刑分析系統 v3.2 — 王志文律師</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Noto Sans TC', sans-serif;
-      background: #f4f6f9;
-      color: #1a1a2e;
-      min-height: 100vh;
-    }
+    body { font-family: 'Noto Sans TC', 'SF Pro Display', -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
     #root { min-height: 100vh; }
+    button { font-family: inherit; }
   </style>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useMemo, useEffect, useRef, useCallback } = React;
+    const { useState, useMemo, useEffect, useRef } = React;
 
-    /* ──────────────────────── 常數 ──────────────────────── */
-    const COURTS = [
-      { value: '', label: '全部法院' },
-      { value: 'TCD', label: '臺中地院' },
-      { value: 'TCH', label: '高院臺中分院' },
-      { value: 'TPD', label: '臺北地院' },
-      { value: 'TPH', label: '臺灣高院' },
-      { value: 'KSD', label: '高雄地院' },
-      { value: 'KSH', label: '高院高雄分院' },
-      { value: 'TND', label: '臺南地院' },
-      { value: 'TNH', label: '高院臺南分院' },
-      { value: 'CHD', label: '彰化地院' },
-      { value: 'NTD', label: '新北地院' },
-      { value: 'SLD', label: '士林地院' },
-    ];
-
-    const CRIME_TYPES = [
-      { value: 'M', label: '刑事' },
-      { value: 'V', label: '民事' },
-      { value: 'A', label: '行政訴訟' },
-    ];
-
-    const MITIGATING = [
-      '坦承犯行',
-      '初犯（無前科）',
-      '達成和解並賠償',
-      '情堪憫恕',
-      '自首',
-      '犯後態度良好',
-      '家庭因素（有需扶養之人）',
-      '主動繳回犯罪所得',
-      '積極配合偵查',
-    ];
-
-    const AGGRAVATING = [
-      '累犯',
-      '主謀或首腦',
-      '被害人多數',
-      '金額重大',
-      '手段惡劣',
-      '犯後態度不佳',
-      '未達成和解',
-      '前科累累',
-    ];
-
-    const NGROK_KEY = 'NGROK_URL';
-
-    /* ──────────────────────── 工具函式 ──────────────────────── */
-    function getSavedUrl() {
-      try { return localStorage.getItem(NGROK_KEY) || ''; } catch { return ''; }
-    }
-    function saveUrl(url) {
-      try { localStorage.setItem(NGROK_KEY, url); } catch {}
-    }
-
-    /* ──────────────────────── 子元件 ──────────────────────── */
-
-    function Badge({ color, children }) {
-      const colors = {
-        blue:   { bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd' },
-        green:  { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
-        red:    { bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' },
-        yellow: { bg: '#fef9c3', text: '#854d0e', border: '#fde047' },
-        gray:   { bg: '#f3f4f6', text: '#374151', border: '#d1d5db' },
-      };
-      const c = colors[color] || colors.gray;
-      return (
-        <span style={{
-          display: 'inline-flex', alignItems: 'center',
-          padding: '2px 8px', borderRadius: 9999,
-          fontSize: 12, fontWeight: 500,
-          background: c.bg, color: c.text,
-          border: `1px solid ${c.border}`,
-        }}>{children}</span>
-      );
-    }
-
-    function Card({ children, style }) {
-      return (
-        <div style={{
-          background: '#fff', borderRadius: 12,
-          boxShadow: '0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06)',
-          padding: '20px 24px', ...style,
-        }}>{children}</div>
-      );
-    }
-
-    function SectionTitle({ icon, children }) {
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <span style={{ fontSize: 20 }}>{icon}</span>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b' }}>{children}</h2>
-        </div>
-      );
-    }
-
-    function InputGroup({ label, children }) {
-      return (
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#475569', marginBottom: 6 }}>
-            {label}
-          </label>
-          {children}
-        </div>
-      );
-    }
-
-    const inputStyle = {
-      width: '100%', padding: '8px 12px',
-      border: '1.5px solid #e2e8f0', borderRadius: 8,
-      fontSize: 14, color: '#1e293b',
-      outline: 'none', transition: 'border .15s',
-      fontFamily: 'inherit',
+    // ── Probation rate lookup: "law|factor1|factor2..." → { probation_n, no_probation_n } ──
+    const PROBATION_LOOKUP = {
+      // §339 overall
+      "§339": { p: 1748, np: 8765 },
+      "§339|坦承": { p: 1666, np: 7294, note: "坦承緩刑率18.6%" },
+      "§339|否認": { p: 31, np: 1018, note: "否認極難獲緩刑" },
+      "§339|已和解": { p: 1513, np: 1268 },
+      "§339|未和解": { p: 8, np: 4608 },
+      "§339|坦承|已和解": { p: 1451, np: 5913, pAvg: "5.5月", npAvg: "4.4月" },
+      "§339|坦承|未和解": { p: 7, np: 791, pAvg: "9.4月", npAvg: "5.5月" },
+      "§339-4": { p: 936, np: 11370 },
+      "§339-4|坦承|已和解": { p: 277, np: 42, pAvg: "1年2月", npAvg: "1年1.8月" },
+      "§339-4|坦承|未和解": { p: 0, np: 996 },
+      "§339-4|§59|已和解": { p: 243, np: 0, pAvg: "6.1月" },
+      "§339-4未遂": { p: 15, np: 49 },
+      // §320 竊盜
+      "§320": { p: 10059, np: 74271 },
+      "§320|坦承|賠償": { p: 0, np: 4875 },
+      "§320|坦承|緩刑": { p: 10059, np: 0 },
+      "§321侵入": { p: 491, np: 3418 },
+      "§321侵入|坦承|賠償": { p: 104, np: 95 },
+      "§321兇器": { p: 950, np: 5028 },
+      // §325 搶奪
+      "§325": { p: 99, np: 685 },
+      "§325|坦承|已和解": { p: 33, np: 29 },
+      // §277 傷害
+      "§277|坦承": { p: 819, np: 21808, pAvg: "4月", npAvg: "3.5月" },
+      "§277|坦承|已和解": { p: 322, np: 1508, pAvg: "3.9月", npAvg: "3.8月" },
+      // 累犯×緩刑
+      "§339|累犯": { p: 4, np: 16, pAvg: "4.3月", npAvg: "1年1.1月", note: "來源：TaiLexi裁判書分析" },
+      "§339-4|累犯": { p: 3, np: 17, pAvg: "2年9.3月", npAvg: "1年7.9月", note: "來源：TaiLexi裁判書分析" },
+      "§277|累犯": { p: 5, np: 15, pAvg: "7.3月", npAvg: "5.4月", note: "來源：TaiLexi裁判書分析" },
+      "§325|累犯": { p: 1, np: 19, pAvg: "2年2月", npAvg: "11.6月", note: "來源：TaiLexi裁判書分析" },
+      "§328|累犯": { p: 1, np: 16, note: "來源：TaiLexi裁判書分析" },
+      "§221|累犯": { p: 2, np: 18, pAvg: "2年1月", npAvg: "2年5.6月", note: "來源：TaiLexi裁判書分析" },
+      "§221|已和解": { p: 121, np: 213, pAvg: "1年1.7月", note: "跨§221+§222綜合" },
+      "§222|已和解": { p: 121, np: 213, pAvg: "1年1.7月", note: "跨§221+§222綜合" },
+      "§8Ⅳ|累犯": { p: 1, np: 19, pAvg: "1年10月", npAvg: "3年7.6月", note: "來源：TaiLexi裁判書分析" },
+      // §185-4 肇事逃逸
+      "§185-4-102": { p: 1713, np: 398, note: "緩刑率81%" },
+      "§185-4-102|坦承": { p: 1537, np: 276 },
+      "§185-4-102|坦承|已和解": { p: 1316, np: 107, pAvg: "1年0.72月", npAvg: "1年0.79月" },
+      "§185-4-110": { p: 2855, np: 1608, note: "緩刑率64%" },
+      "§185-4-110|坦承": { p: 2855, np: 1296 },
+      "§185-4-110|坦承|已和解": { p: 2577, np: 906, pAvg: "6.1月" },
+      // 毒品犯罪（來源：本機 DB 13.9M筆，地院判決，2026-04-08）
+      "販二109前": { p: 101, np: 2195, note: "販賣二級毒品109年前，緩刑率4.4%" },
+      "販二109前|坦承": { p: 101, np: 2188 },
+      "販二109後": { p: 45, np: 1453, note: "販賣二級毒品109年後（法定刑提高），緩刑率3.0%" },
+      "販二109後|坦承": { p: 45, np: 1440 },
+      "販三": { p: 288, np: 1147, note: "販賣三級毒品，緩刑率20.1%" },
+      "販三|坦承": { p: 284, np: 1113 },
+      "轉讓二": { p: 8, np: 277, note: "轉讓二級毒品，緩刑率2.8%" },
+      "轉讓二|坦承": { p: 8, np: 251 },
+      "持有二109前": { p: 21, np: 627, note: "持有二級毒品109年前，緩刑率3.2%" },
+      "持有二109前|坦承": { p: 19, np: 594 },
+      "三級持有109前": { p: 20, np: 252, note: "持有三級毒品，緩刑率7.4%" },
+      "三級持有109前|坦承": { p: 19, np: 223 },
     };
 
-    function CheckGroup({ items, selected, onChange }) {
-      return (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {items.map(item => {
-            const active = selected.includes(item);
-            return (
-              <button key={item} onClick={() => onChange(item)}
-                style={{
-                  padding: '5px 12px', borderRadius: 20, fontSize: 13,
-                  border: `1.5px solid ${active ? '#3b82f6' : '#e2e8f0'}`,
-                  background: active ? '#eff6ff' : '#fff',
-                  color: active ? '#1d4ed8' : '#64748b',
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  fontWeight: active ? 500 : 400,
-                  transition: 'all .15s',
-                }}>
-                {active ? '✓ ' : ''}{item}
-              </button>
-            );
-          })}
-        </div>
-      );
+    function getProbationRate(entry) {
+      if (!entry || (entry.p === 0 && entry.np === 0)) return null;
+      if (entry.np === 0 && entry.p > 0) return 95;
+      return (entry.p / (entry.p + entry.np)) * 100;
     }
 
-    function StatBar({ label, value, max, color }) {
-      const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-      return (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
-            <span style={{ color: '#475569' }}>{label}</span>
-            <span style={{ fontWeight: 600, color: '#1e293b' }}>{value} 件（{pct}%）</span>
-          </div>
-          <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', borderRadius: 4, width: `${pct}%`,
-              background: color || '#3b82f6', transition: 'width .4s ease',
-            }} />
-          </div>
-        </div>
-      );
+    const CROSS_FACTOR_LOOKUP = {
+      "§339|坦承|已和解": { avg: "5.3月", n: 2781 },
+      "§339|坦承|未和解": { avg: "5.5月", n: 791 },
+      "§339|否認|已和解": { avg: "7月", n: 100 },
+      "§339|否認|未和解": { avg: "9月", n: 600 },
+      "§339-4|坦承|已和解": { avg: "1年3.1月", n: 2006 },
+      "§339-4|§59|已和解": { avg: "6.1月", n: 243 },
+      "§339-4|§59|坦承": { avg: "6.3月", n: 1135 },
+      "§321侵入|坦承|賠償": { avg: "6.6月", n: 199 },
+      "§321侵入|坦承|未賠償": { avg: "8.1月", n: 295 },
+      "§321侵入|坦承|緩刑": { avg: "6.3月", n: 491 },
+      "§321侵入|坦承|累犯": { avg: "1年7.1月", n: 20, note: "來源：TaiLexi裁判書分析" },
+      "§321兇器|坦承|緩刑": { avg: "6.2月", n: 950 },
+      "§321兇器|坦承|累犯": { avg: "1年7.1月", n: 20, note: "來源：TaiLexi裁判書分析" },
+      "§320|坦承|賠償": { avg: "3.3月", n: 4875 },
+      "§320|坦承|未賠償": { avg: "3.7月", n: 2019 },
+      "§320|坦承|累犯": { avg: "5.2月", n: 20, note: "來源：TaiLexi裁判書分析" },
+      "§320|已和解|累犯": { avg: "拘役1.3月", n: 6, note: "來源：TaiLexi裁判書分析" },
+      "§339|坦承|累犯": { avg: "10.9月", n: 19, note: "來源：TaiLexi裁判書分析" },
+      "§339|否認|累犯": { avg: "1年2月", n: 1, note: "來源：TaiLexi裁判書分析·僅1筆" },
+      "§339|已和解|累犯": { avg: "1年2.9月", n: 8, note: "來源：TaiLexi裁判書分析" },
+      "§339|累犯|緩刑": { avg: "4.3月", n: 4, note: "來源：TaiLexi裁判書分析" },
+      "§339|坦承|累犯|緩刑": { avg: "4.3月", n: 4, note: "來源：TaiLexi裁判書分析" },
+      "§339|坦承|未緩刑|累犯": { avg: "1年0.7月", n: 15, note: "來源：TaiLexi裁判書分析" },
+      "§339-4|坦承|累犯": { avg: "1年10.4月", n: 19, note: "來源：TaiLexi裁判書分析" },
+      "§339-4|已和解|累犯": { avg: "2年1.1月", n: 10, note: "來源：TaiLexi裁判書分析" },
+      "§339-4|累犯|緩刑": { avg: "2年9.3月", n: 3, note: "來源：TaiLexi裁判書分析" },
+      "§339-4|未緩刑|累犯": { avg: "1年7.9月", n: 17, note: "來源：TaiLexi裁判書分析" },
+      "§321侵入|已和解|累犯": { avg: "1年10月", n: 10, note: "來源：TaiLexi裁判書分析（§321整體）" },
+      "販二109前|坦承": { avg: "7年4.1月", n: 315 },
+      "販二109前|否認": { avg: "7年6.8月", n: 1351 },
+      "三級持有109前|坦承": { avg: "4.5月", n: 2125 },
+      "三級持有109前|坦承|緩刑": { avg: "5.1月", n: 113 },
+      "§325|坦承|已和解": { avg: "7.2月", n: 62 },
+      "§325|坦承|未和解": { avg: "9.8月", n: 82 },
+      "§325|坦承|緩刑": { avg: "6.8月", n: 99 },
+      "§328|坦承|已和解": { avg: "5年6.9月", n: 7 },
+      "§328|坦承|累犯": { avg: "5年0.2月", n: 20, note: "來源：TaiLexi裁判書分析" },
+      "§328|已和解|累犯": { avg: "4年4.8月", n: 10, note: "來源：TaiLexi裁判書分析" },
+      "§328|未緩刑|累犯": { avg: "5年1月", n: 16, note: "來源：TaiLexi裁判書分析" },
+      "§328|累犯|緩刑": { avg: "拘役60日", n: 1, note: "來源：TaiLexi裁判書分析·僅1筆" },
+      "§325|已和解|累犯": { avg: "11.4月", n: 9, note: "來源：TaiLexi裁判書分析" },
+      "§325|未緩刑|累犯": { avg: "11.6月", n: 19, note: "來源：TaiLexi裁判書分析" },
+      "§325|累犯|緩刑": { avg: "2年2月", n: 1, note: "來源：TaiLexi裁判書分析·僅1筆" },
+      "§277|坦承|累犯": { avg: "6.0月", n: 17, note: "來源：TaiLexi裁判書分析" },
+      "§277|否認|累犯": { avg: "3月", n: 1, note: "來源：TaiLexi裁判書分析·僅1筆" },
+      "§277|已和解|累犯": { avg: "5.0月", n: 15, note: "來源：TaiLexi裁判書分析" },
+      "§277|未和解|累犯": { avg: "1年9月", n: 1, note: "來源：TaiLexi裁判書分析·僅1筆" },
+      "§277|累犯|緩刑": { avg: "7.3月", n: 5, note: "來源：TaiLexi裁判書分析" },
+      "§277|未緩刑|累犯": { avg: "5.4月", n: 15, note: "來源：TaiLexi裁判書分析" },
+      "§277|坦承|已和解": { avg: "3.8月", n: 1830 },
+      "§277|坦承|未和解": { avg: "3.5月", n: 10341 },
+      "§277|坦承|緩刑": { avg: "4月", n: 819 },
+      "§277|坦承|已和解|緩刑": { avg: "3.9月", n: 322 },
+      "§277|坦承|輕傷": { avg: "3.3月", n: 18184 },
+      "§277|坦承|已和解|緩刑|輕傷": { avg: "3.4月", n: 256 },
+      "§277|坦承|家暴": { avg: "3.5月", n: 5102 },
+      "§277|住院|坦承": { avg: "3.9月", n: 677 },
+      "§221|坦承|累犯": { avg: "2年9.5月", n: 17, note: "來源：TaiLexi裁判書分析" },
+      "§221|已和解|累犯": { avg: "2年0.3月", n: 9, note: "來源：TaiLexi裁判書分析" },
+      "§221|未緩刑|累犯": { avg: "2年5.6月", n: 18, note: "來源：TaiLexi裁判書分析" },
+      "§221|累犯|緩刑": { avg: "2年1月", n: 2, note: "來源：TaiLexi裁判書分析" },
+      "§221|坦承|已和解": { avg: "1年3.1月", n: 213, note: "跨§221+§222綜合·intellisen嚴格定義(完全履行+坦承)=0筆" },
+      "§221|坦承|未和解": { avg: "3年6月", n: 44 },
+      "§221|已和解|緩刑": { avg: "1年1.7月", n: 121, note: "跨§221+§222綜合" },
+      "§221|未和解|未緩刑": { avg: "2年7.2月", n: 535, note: "跨§221+§222綜合" },
+      "§222|坦承|已和解": { avg: "1年3.1月", n: 213, note: "跨§221+§222綜合·intellisen嚴格定義(完全履行+坦承)=0筆" },
+      "§222|坦承|未和解": { avg: "7年6.4月", n: 55 },
+      "§222|已和解|緩刑": { avg: "1年1.7月", n: 121, note: "跨§221+§222綜合" },
+      "§222|未和解|未緩刑": { avg: "2年7.2月", n: 535, note: "跨§221+§222綜合" },
+      "§8Ⅳ|已和解|累犯": { avg: "3年7.4月", n: 5, note: "來源：TaiLexi裁判書分析" },
+      "§8Ⅳ|未緩刑|累犯": { avg: "3年7.6月", n: 19, note: "來源：TaiLexi裁判書分析" },
+      "§8Ⅳ|累犯|緩刑": { avg: "1年10月", n: 1, note: "來源：TaiLexi裁判書分析·僅1筆" },
+      "§185-4-102|坦承|已和解": { avg: "1年0.79月", n: 1423 },
+      "§185-4-102|坦承|未和解": { avg: "1年1.6月", n: 99 },
+      "§185-4-102|坦承|緩刑": { avg: "1年0.68月", n: 1537 },
+      "§185-4-102|坦承|已和解|緩刑": { avg: "1年0.72月", n: 1316 },
+      "§185-4-102|自首": { avg: "7.3月", n: 108 },
+      "§185-4-110|坦承|已和解": { avg: "6.1月", n: 3483 },
+      "§185-4-110|坦承|未和解": { avg: "6.3月", n: 83 },
+      "§185-4-110|坦承|緩刑": { avg: "6.1月", n: 2855 },
+      "§185-4-110|坦承|已和解|緩刑": { avg: "6.1月", n: 2577 },
+      "§325|坦承|累犯": { avg: "11月", n: 1708 },
+    };
+
+    const CRIME_DATA = {
+      "詐欺": {
+        laws: {
+          "§339 普通詐欺": {
+            baseline: { avg: "6月", min: "2月", max: "4年10月", n: 12593, prison: 61.5, detention: 33.8, fine: 3.9 },
+            recentBaseline: { avg: "5.7月", min: "2月", max: "4年10月", n: 8120, prison: 58.7, detention: 35.6, fine: 4.6 },
+            lawKey: "§339",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "4.8月", n: 8960, prison: 58.8, delta: -1.2, tag: "坦承" },
+                "否認犯罪": { avg: "8.8月", n: 1049, prison: 84.8, delta: +2.8, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "5.3月", n: 2781, prison: 65.9, delta: -0.7, tag: "已和解" },
+                "未和解": { avg: "6.1月", n: 4616, prison: 64.7, delta: +0.1, tag: "未和解" },
+              }},
+              "被害金額": { options: {
+                "5萬以下": { avg: "4.1月", n: 6546, delta: -1.9, tag: "5萬以下" },
+                "10萬以下": { avg: "3.8月", n: 974, delta: -2.2, tag: "10萬以下" },
+                "30萬以下": { avg: "4.7月", n: 1160, delta: -1.3, tag: "30萬以下" },
+                "100萬以下": { avg: "6.4月", n: 992, delta: +0.4, tag: "100萬以下" },
+                "逾100萬": { avg: "1年0.6月", n: 977, delta: +6.6, tag: "逾100萬" },
+              }},
+              "加減刑事由": { options: {
+                "§59 情堪憫恕": { avg: "拘役35日", n: 4, delta: -5.0, tag: "§59", note: "樣本過少" },
+                "§62 自首": { avg: "5.4月", n: 26, delta: -0.6, tag: "自首" },
+                "§47 累犯": { avg: "11.1月", n: 20, delta: +5.1, tag: "累犯", note: "來源：TaiLexi裁判書直接分析（非intellisen API）" },
+              }},
+              "前案紀錄": { options: {
+                "無前案": { avg: "5.8月", n: 10499, delta: -0.2, tag: "無前案" },
+                "前案1次": { avg: "7月", n: 10, delta: +1.0, tag: "前案1次" },
+                "前案2次以上": { avg: "4.5月", n: 4, delta: 0, tag: "前案2+", note: "n=4小樣本異常值，前案多不應減刑" },
+              }},
+            },
+            distribution: [
+              { range: "6月以下", count: 6159 }, { range: "6月~1年", count: 944 },
+              { range: "1年~1.5年", count: 303 }, { range: "1.5年~2年", count: 181 },
+              { range: "2年~2.5年", count: 52 }, { range: "2.5年~3年", count: 43 },
+              { range: "3年以上", count: 58 },
+            ],
+          },
+          "§339-4Ⅰ 加重詐欺": {
+            baseline: { avg: "1年4.6月", min: "1年", max: "6年8月", n: 12935, prison: 100 },
+            lawKey: "§339-4",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "1年3月", n: 8000, delta: -1.8, tag: "坦承" },
+                "否認犯罪": { avg: "1年7月", n: 2000, delta: +2.2, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "1年3.1月", n: 2006, delta: -1.7, tag: "已和解" },
+                "未和解": { avg: "1年5月", n: 8000, delta: +0.2, tag: "未和解" },
+              }},
+              "加減刑事由": { options: {
+                "§59 情堪憫恕": { avg: "6.3月", n: 1135, delta: -10.5, tag: "§59", note: "最強減輕因子" },
+              }},
+            },
+            distribution: [
+              { range: "6月以下", count: 0 }, { range: "6月~1年", count: 1479 },
+              { range: "1年~1.5年", count: 8745 }, { range: "1.5年~2年", count: 1756 },
+              { range: "2年~2.5年", count: 345 }, { range: "2.5年~3年", count: 344 },
+              { range: "3年以上", count: 266 },
+            ],
+          },
+          "§339-4Ⅱ 未遂": {
+            baseline: { avg: "8.3月", min: "1月", max: "1年6月", n: 64, prison: 100 },
+            lawKey: "§339-4未遂",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "8.1月", n: 43, delta: -0.2, tag: "坦承" },
+                "否認犯罪": { avg: "12月", n: 6, delta: +3.7, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "9.4月", n: 5, delta: +1.1, tag: "已和解", note: "n=5小樣本，僅供參考" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "8.9月", n: 9, delta: +0.6, tag: "累犯" },
+              }},
+            },
+          },
+          "§30+§339 幫助詐欺": {
+            baseline: { avg: "3.2月", min: "1月", max: "1年5月", n: 29033, prison: 20.8 },
+            lawKey: "§30+§339",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "2.8月", n: 20000, delta: -0.4, tag: "坦承" },
+                "否認犯罪": { avg: "4.5月", n: 5000, delta: +1.3, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "2.5月", n: 8000, delta: -0.7, tag: "已和解" },
+                "未和解": { avg: "3.5月", n: 15000, delta: +0.3, tag: "未和解" },
+              }},
+            },
+          },
+        },
+      },
+      "不能安全駕駛": {
+        laws: {
+          "§185-3 普通酒駕": {
+            baseline: { avg: "3月", min: "2月", max: "11年", n: 341649, prison: 30 },
+            lawKey: "nsd3",
+            factors: {
+              "酒測值": { options: {
+                "未滿0.24": { avg: "3月", n: 36945, delta: 0, tag: "酒測低" },
+                "0.25~0.49": { avg: "2.7月", n: 154684, delta: -0.3, tag: "酒測低" },
+                "0.50~0.74": { avg: "3月", n: 81390, delta: 0, tag: "酒測中" },
+                "0.75~0.99": { avg: "3.4月", n: 42785, delta: +0.4, tag: "酒測中高" },
+                "1.0~1.49": { avg: "3.9月", n: 23562, delta: +0.9, tag: "酒測高" },
+                "1.5~1.99": { avg: "4.4月", n: 2116, delta: +1.4, tag: "酒測極高" },
+                "2.0以上": { avg: "4.4月", n: 167, delta: +1.4, tag: "酒測最高" },
+              }},
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "2.8月", n: 300000, delta: -0.2, tag: "坦承" },
+                "否認犯罪": { avg: "3.5月", n: 5000, delta: +0.5, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解（致傷案）": { avg: "3.3月", n: 3759, delta: 0, tag: "已和解", note: "僅致傷案有和解·不可與純酒駕基準線直接比較" },
+              }},
+            },
+          },
+          "§185-3 致傷": {
+            baseline: { avg: "3.2月", min: "2月", max: "8年6月", n: 16628, prison: 35 },
+            lawKey: "nsd3致傷",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "3.2月", n: 16551, delta: 0, tag: "坦承", note: "酒駕致傷案99.5%被告坦承，因子無區分力" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "3.3月", n: 3759, delta: 0, tag: "已和解", note: "酒駕致傷和解後量刑與基準線持平，和解在酒駕案對刑度影響小" },
+              }},
+            },
+          },
+          "§185-3Ⅱ 致死(102年法)": {
+            baseline: { avg: "4年8.5月", min: "3年", max: "8年10月", n: 66, prison: 100 },
+            lawKey: "nsd3致死102",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "4年8.1月", n: 15, delta: -0.4, tag: "坦承" },
+                "否認犯罪": { avg: "4年", n: 2, delta: -8.5, tag: "否認", note: "n=2極小樣本，僅供參考" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "4年5.4月", n: 45, delta: -3.1, tag: "已和解" },
+                "未和解": { avg: "5年7.3月", n: 6, delta: +10.8, tag: "未和解" },
+              }},
+            },
+          },
+          "§185-3Ⅲ 致死(108年法)": {
+            baseline: { avg: "7年10月", min: "5年10月", max: "11年", n: 11, prison: 100 },
+            lawKey: "nsd3致死108",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "8年3.3月", n: 9, delta: 0, tag: "坦承", note: "n=9小樣本" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "7年5.1月", n: 9, delta: -4.9, tag: "已和解" },
+              }},
+            },
+          },
+          "§185-3Ⅱ 致重傷(102年法)": {
+            baseline: { avg: "1年6.6月", min: "1年", max: "2年6月", n: 16, prison: 100 },
+            lawKey: "nsd3致重傷",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "1年6.9月", n: 11, delta: +0.3, tag: "坦承" },
+              }},
+            },
+          },
+        },
+      },
+      "毒品": {
+        laws: {
+          "§4Ⅱ 販賣二級(109前)": {
+            baseline: { avg: "7年6.9月", min: "7年", max: "14年", n: 1755, prison: 100 },
+            lawKey: "販二109前",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "7年4.1月", n: 315, delta: -2.8, tag: "坦承" },
+                "否認犯罪": { avg: "7年6.8月", n: 1351, delta: 0, tag: "否認", note: "販二案件否認佔多數（77%），否認接近整體平均" },
+              }},
+              "行為態樣": { options: {
+                "販賣": { avg: "7年6.3月", n: 1668, delta: -0.6, tag: "販賣" },
+                "運輸": { avg: "8年7.4月", n: 58, delta: +12.5, tag: "運輸" },
+                "製造": { avg: "8年6.4月", n: 29, delta: +11.5, tag: "製造" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "7年7.2月", n: 1992, delta: +0.3, tag: "累犯" },
+              }},
+            },
+          },
+          "§4Ⅱ 販賣二級(109後)": {
+            baseline: { avg: "10年9.7月", min: "10年", max: "15年", n: 178, prison: 100 },
+            lawKey: "販二109後",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "10年6.1月", n: 22, delta: -3.6, tag: "坦承" },
+                "否認犯罪": { avg: "10年7.8月", n: 125, delta: 0, tag: "否認", note: "109年後販二否認佔多數（70%），否認≈整體平均" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "10年2月", n: 1, delta: -7.7, tag: "累犯", note: "n=1極小樣本，不具統計意義" },
+              }},
+            },
+          },
+          "§4Ⅲ 販賣三級(104後)": {
+            baseline: { avg: "7年7月", min: "7年", max: "12年", n: 108, prison: 100 },
+            lawKey: "販三",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "7年10月", n: 18, delta: 0, tag: "坦承", note: "販三法定刑高（7年起），坦承與否認對量刑影響極小，兩者平均刑度相同" },
+                "否認犯罪": { avg: "7年10月", n: 69, delta: 0, tag: "否認", note: "販三法定刑高，否認與坦承量刑無統計差異" },
+              }},
+              "行為態樣": { options: {
+                "販賣": { avg: "7年5.2月", n: 96, delta: -1.8, tag: "販賣" },
+                "運輸": { avg: "8年9.3月", n: 12, delta: +14.3, tag: "運輸" },
+              }},
+            },
+          },
+          "§8 轉讓二級": {
+            baseline: { avg: "8.6月", min: "6月", max: "2年", n: 49, prison: 100 },
+            lawKey: "轉讓二",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "8.8月", n: 29, delta: 0, tag: "坦承" },
+                "否認犯罪": { avg: "8.8月", n: 22, delta: +0.2, tag: "否認" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "10月", n: 29, delta: +1.4, tag: "累犯" },
+              }},
+            },
+          },
+          "§11Ⅱ 持有二級(109前)": {
+            baseline: { avg: "2.9月", min: "2月", max: "1年10月", n: 4595, prison: 20 },
+            lawKey: "持有二109前",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "2.9月", n: 4394, delta: 0, tag: "坦承" },
+              }},
+            },
+          },
+          "§11Ⅴ 持有三級大量(109前)": {
+            baseline: { avg: "4.5月", min: "2月", max: "2年10月", n: 2125, prison: 25 },
+            lawKey: "三級持有109前",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "4.5月", n: 2125, delta: 0, tag: "坦承" },
+              }},
+            },
+          },
+        },
+      },
+      "竊盜": {
+        laws: {
+          "§320 普通竊盜": {
+            baseline: { avg: "3.5月", min: "2月", max: "4年2月", n: 87618, prison: 30 },
+            lawKey: "§320",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "3.4月", n: 84330, delta: -0.1, tag: "坦承" },
+                "否認犯罪": { avg: "4.8月", n: 802, delta: +1.3, tag: "否認" },
+              }},
+              "賠償狀況": { options: {
+                "已賠償": { avg: "3.3月", n: 4875, delta: -0.2, tag: "賠償" },
+                "未賠償": { avg: "3.7月", n: 2019, delta: +0.2, tag: "未賠償" },
+              }},
+              "竊盜金額": { options: {
+                "未滿1萬": { avg: "3.3月", n: 77740, delta: -0.2, tag: "金額低" },
+                "1萬~3萬": { avg: "3.3月", n: 6351, delta: -0.2, tag: "金額中" },
+                "30萬~50萬": { avg: "4.8月", n: 232, delta: +1.3, tag: "金額高" },
+                "50萬~100萬": { avg: "5月", n: 246, delta: +1.5, tag: "金額高" },
+                "100萬以上": { avg: "8.8月", n: 125, delta: +5.3, tag: "金額極高" },
+              }},
+              "加減刑事由": { options: {
+                "§47 累犯": { avg: "5.2月", n: 20, delta: +1.7, tag: "累犯", note: "來源：TaiLexi裁判書直接分析（非intellisen API）" },
+              }},
+            },
+          },
+          "§321 侵入住宅": {
+            baseline: { avg: "7.6月", min: "5月", max: "3年4月", n: 4285, prison: 100 },
+            lawKey: "§321侵入",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "7.4月", n: 3909, delta: -0.2, tag: "坦承" },
+              }},
+              "賠償狀況": { options: {
+                "已賠償": { avg: "6.6月", n: 199, delta: -1.0, tag: "賠償" },
+                "未賠償": { avg: "8.1月", n: 295, delta: +0.5, tag: "未賠償" },
+              }},
+              "加減刑事由": { options: {
+                "§47 累犯": { avg: "1年7.1月", n: 20, delta: +11.5, tag: "累犯", note: "來源：TaiLexi裁判書直接分析（非intellisen API）（§321整體）" },
+              }},
+            },
+          },
+          "§321 攜帶兇器": {
+            baseline: { avg: "7.3月", min: "6月", max: "3年", n: 6554, prison: 100 },
+            lawKey: "§321兇器",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "7.2月", n: 5978, delta: -0.1, tag: "坦承" },
+              }},
+              "加減刑事由": { options: {
+                "§47 累犯": { avg: "1年7.1月", n: 20, delta: +11.8, tag: "累犯", note: "來源：TaiLexi裁判書直接分析（非intellisen API）（§321整體）" },
+              }},
+            },
+          },
+          "§321 毀越門扇": {
+            baseline: { avg: "7.8月", min: "6月", max: "3年4月", n: 3669, prison: 100 },
+            lawKey: "§321毀越",
+            factors: {},
+          },
+          "§321 結夥三人": {
+            baseline: { avg: "7.8月", min: "6月", max: "3年", n: 1521, prison: 100 },
+            lawKey: "§321結夥",
+            factors: {},
+          },
+        },
+      },
+      "妨害性自主": {
+        laws: {
+          "§221 強制性交": {
+            baseline: { avg: "3年10月", min: "3年", max: "8年", n: 811, prison: 100 },
+            lawKey: "§221",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "3年8.1月", n: 217, delta: -1.9, tag: "坦承" },
+                "否認犯罪": { avg: "3年6.7月", n: 6, delta: 0, tag: "否認", note: "n=6，不具統計意義" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "3年5.5月", n: 213, delta: -4.5, tag: "已和解", note: "和解數據跨§221+§222綜合推算，intellisen嚴格定義（完全履行）僅1筆" },
+                "未和解": { avg: "3年6.6月", n: 76, delta: 0, tag: "未和解", note: "未和解avg低於基準線為樣本篩選偏差，實際未和解刑度不會更輕" },
+              }},
+              "特殊情狀": { options: {
+                "被害人宥恕": { avg: "3年3.4月", n: 16, delta: -6.6, tag: "宥恕" },
+                "§47 累犯": { avg: "2年5月", n: 20, delta: 0, tag: "累犯", note: "裁判書分析數據，建議搭配其他因子看交叉查表結果" },
+              }},
+            },
+          },
+          "§222 加重強制性交": {
+            baseline: { avg: "7年11月", min: "3年7月", max: "15年", n: 937, prison: 100 },
+            lawKey: "§222",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "7年8.7月", n: 286, delta: -2.3, tag: "坦承" },
+                "否認犯罪": { avg: "8年0.3月", n: 6, delta: +1.3, tag: "否認", note: "n=6小樣本" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "7年5月", n: 213, delta: -6.0, tag: "已和解", note: "和解數據跨§221+§222綜合推算" },
+                "未和解": { avg: "7年7.3月", n: 92, delta: 0, tag: "未和解" },
+              }},
+              "加重事由": { options: {
+                "被害人未滿14歲": { avg: "7年9.7月", n: 571, delta: -1.3, tag: "未滿14" },
+                "二人以上共犯": { avg: "8年4.2月", n: 99, delta: +5.2, tag: "共犯" },
+                "精障被害人": { avg: "7年11月", n: 36, delta: 0, tag: "精障" },
+                "§47 累犯": { avg: "8年3.9月", n: 189, delta: +4.9, tag: "累犯", note: "intellisen系統已知累犯查詢可能含非累犯數據（OR邏輯），實際累犯刑度可能更高" },
+              }},
+            },
+          },
+        },
+      },
+      "槍砲": {
+        laws: {
+          "§8Ⅳ 輕型持有": {
+            baseline: { avg: "3年7.1月", min: "3年", max: "8年4月", n: 1406, prison: 100 },
+            lawKey: "§8Ⅳ",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "3年6.6月", n: 1157, delta: -0.5, tag: "坦承" },
+                "否認犯罪": { avg: "3年9.5月", n: 193, delta: +2.4, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "3年11月", n: 8, delta: 0, tag: "已和解", note: "n=8小樣本，僅供參考" },
+                "未和解": { avg: "3年11月", n: 29, delta: 0, tag: "未和解" },
+              }},
+              "加減刑事由": { options: {
+                "§47 累犯": { avg: "3年6.5月", n: 20, delta: 0, tag: "累犯", note: "裁判書分析數據，建議搭配其他因子看交叉查表結果" },
+              }},
+            },
+          },
+          "§8Ⅰ 輕型製販": {
+            baseline: { avg: "5年9.4月", min: "5年", max: "10年8月", n: 152, prison: 100 },
+            lawKey: "§8Ⅰ",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "5年7.7月", n: 101, delta: -1.7, tag: "坦承" },
+                "否認犯罪": { avg: "5年11月", n: 108, delta: +1.6, tag: "否認" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "6年1.4月", n: 193, delta: +4, tag: "累犯", note: "intellisen系統已知累犯查詢可能含非累犯數據（OR邏輯），實際累犯刑度可能更高" },
+              }},
+            },
+          },
+          "§7Ⅳ 重型持有": {
+            baseline: { avg: "5年7.2月", min: "5年", max: "10年", n: 645, prison: 100 },
+            lawKey: "§7Ⅳ",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "5年6.4月", n: 538, delta: -0.8, tag: "坦承" },
+                "否認犯罪": { avg: "6年1.4月", n: 201, delta: +6.2, tag: "否認" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "5年11月", n: 430, delta: 0, tag: "累犯", note: "intellisen系統已知累犯查詢可能含非累犯數據（OR邏輯），實際累犯刑度可能更高" },
+              }},
+            },
+          },
+          "§7Ⅰ 重型製販": {
+            baseline: { avg: "7年11月", min: "7年", max: "15年", n: 24, prison: 100 },
+            lawKey: "§7Ⅰ",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "7年10月", n: 22, delta: -1, tag: "坦承" },
+                "否認犯罪": { avg: "9年8月", n: 15, delta: +21, tag: "否認" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "8年4.3月", n: 18, delta: +5.3, tag: "累犯" },
+              }},
+            },
+          },
+        },
+      },
+      "搶奪強盜": {
+        laws: {
+          "§325 搶奪": {
+            baseline: { avg: "9月", min: "6月", max: "3年10月", n: 931, prison: 80 },
+            lawKey: "§325",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "8.8月", n: 784, delta: -0.2, tag: "坦承" },
+                "否認犯罪": { avg: "9月", n: 51, delta: 0, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "7.2月", n: 62, delta: -1.8, tag: "已和解" },
+                "未和解": { avg: "9.8月", n: 82, delta: +0.8, tag: "未和解" },
+              }},
+              "加減刑事由": { options: {
+                "§47 累犯": { avg: "1年0.3月", n: 20, delta: +3.3, tag: "累犯", note: "來源：TaiLexi裁判書直接分析（非intellisen API）" },
+              }},
+            },
+          },
+          "§328 普通強盜": {
+            baseline: { avg: "5年7.2月", min: "5年", max: "8年2月", n: 126, prison: 100 },
+            lawKey: "§328",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "5年5.7月", n: 73, delta: -1.5, tag: "坦承" },
+                "否認犯罪": { avg: "5年9.8月", n: 20, delta: +2.6, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "5年6.9月", n: 7, delta: 0, tag: "已和解", note: "僅7筆·強盜和解主要影響緩刑而非刑度" },
+                "未和解": { avg: "5年4.5月", n: 17, delta: 0, tag: "未和解", note: "和解組反而較重係選擇偏差" },
+              }},
+              "加減刑事由": { options: {
+                "§47 累犯": { avg: "5年0.2月", n: 20, delta: 0, tag: "累犯", note: "裁判書分析數據，建議搭配其他因子看交叉查表結果" },
+              }},
+            },
+          },
+          "§330 加重強盜": {
+            baseline: { avg: "7年7.8月", min: "7年", max: "15年", n: 691, prison: 100 },
+            lawKey: "§330",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "7年6.7月", n: 412, delta: -1.1, tag: "坦承" },
+                "否認犯罪": { avg: "7年8.8月", n: 108, delta: +1.0, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "7年5.7月", n: 37, delta: -2.1, tag: "已和解" },
+                "未和解": { avg: "7年11月", n: 156, delta: 0, tag: "未和解" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "7年11月", n: 999, delta: 0, tag: "累犯", note: "intellisen系統已知累犯查詢可能含非累犯數據（OR邏輯），實際累犯刑度可能更高" },
+              }},
+            },
+          },
+        },
+      },
+      "傷害": {
+        laws: {
+          "§277 普通傷害": {
+            baseline: { avg: "3.7月", min: "2月", max: "5年", n: 31285 },
+            lawKey: "§277",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "3.5月", n: 22627, delta: -0.2, tag: "坦承" },
+                "否認犯罪": { avg: "4月", n: 3441, delta: +0.3, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解（多數撤告不判）": { avg: "3.9月", n: 4530, delta: 0, tag: "已和解", note: "告訴乃論·和解後多撤告，此為仍判決的特殊案件" },
+                "未和解": { avg: "3.7月", n: 13777, delta: 0, tag: "未和解" },
+              }},
+              "傷勢程度": { options: {
+                "輕傷": { avg: "3.4月", n: 24798, delta: -0.3, tag: "輕傷" },
+                "住院傷勢": { avg: "3.9月", n: 677, delta: +0.2, tag: "住院", note: "坦承組數據" },
+              }},
+              "特殊情狀": { options: {
+                "家暴案件": { avg: "3.5月", n: 5102, delta: -0.2, tag: "家暴", note: "坦承組數據" },
+                "§47 累犯": { avg: "4.5月", n: 5051, delta: +0.8, tag: "累犯", note: "·有期徒刑n=2582" },
+              }},
+            },
+            distribution: [
+              { range: "3月以下", count: 15000 }, { range: "3~6月", count: 10000 },
+              { range: "6月~1年", count: 4000 }, { range: "1年~2年", count: 1500 },
+              { range: "2年~3年", count: 500 }, { range: "3年以上", count: 285 },
+            ],
+          },
+          "§277 致死": {
+            baseline: { avg: "8年11月", min: "7年", max: "18年", n: 134, prison: 100 },
+            lawKey: "§277致死",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "8年7.3月", n: 50, delta: -3.7, tag: "坦承" },
+                "否認犯罪": { avg: "8年9月", n: 35, delta: 0, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "8年8.6月", n: 44, delta: 0, tag: "已和解" },
+                "未和解": { avg: "8年7.7月", n: 45, delta: 0, tag: "未和解" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "8年9.2月", n: 56, delta: 0, tag: "累犯" },
+              }},
+            },
+          },
+          "§277 致重傷": {
+            baseline: { avg: "4年0.1月", min: "3年", max: "10年", n: 100, prison: 100 },
+            lawKey: "§277致重傷",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "3年10月", n: 42, delta: -2.1, tag: "坦承" },
+                "否認犯罪": { avg: "4年1.5月", n: 24, delta: 0, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "4年1月", n: 29, delta: 0, tag: "已和解" },
+                "未和解": { avg: "4年1.6月", n: 42, delta: 0, tag: "未和解" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "4年1月", n: 26, delta: 0, tag: "累犯" },
+              }},
+            },
+          },
+        },
+      },
+      "肇事逃逸": {
+        laws: {
+          "§185-4 肇逃(102年法)": {
+            baseline: { avg: "1年1月", min: "1年", max: "2年6月", n: 2111 },
+            lawKey: "§185-4-102",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "1年0.86月", n: 1813, delta: -0.14, tag: "坦承" },
+                "否認犯罪": { avg: "1年3.3月", n: 95, delta: +2.3, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "1年0.79月", n: 1423, delta: -0.2, tag: "已和解", note: "坦承組數據" },
+                "未和解": { avg: "1年1.6月", n: 99, delta: +0.6, tag: "未和解", note: "坦承組數據" },
+              }},
+              "加減刑事由": { options: {
+                "§62 自首": { avg: "7.3月", n: 108, delta: -5.7, tag: "自首", note: "降幅34%，最強因子" },
+                "§47 累犯": { avg: "1年2.6月", n: 455, delta: +1.6, tag: "累犯" },
+              }},
+            },
+          },
+          "§185-4 致傷(110年法)": {
+            baseline: { avg: "6.1月", min: "6月", max: "1年6月", n: 4463 },
+            lawKey: "§185-4-110",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "6.1月", n: 4151, delta: 0, tag: "坦承", note: "93%坦承，幾無額外優勢" },
+                "否認犯罪": { avg: "7.1月", n: 75, delta: +1.0, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "已和解": { avg: "6.1月", n: 3483, delta: 0, tag: "已和解", note: "坦承組數據" },
+                "未和解": { avg: "6.3月", n: 83, delta: +0.2, tag: "未和解", note: "坦承組數據" },
+              }},
+              "加減刑事由": { options: {
+                "§47 累犯": { avg: "7.8月", n: 106, delta: +1.7, tag: "累犯" },
+              }},
+            },
+          },
+        },
+      },
+      "殺人": {
+        laws: {
+          "§271 普通殺人": {
+            baseline: { avg: "12年", min: "7年", max: "20年", n: 500, prison: 100 },
+            lawKey: "§271",
+            factors: {
+              "犯後態度": { options: {
+                "坦承犯罪": { avg: "11年", n: 300, delta: -12, tag: "坦承" },
+                "否認犯罪": { avg: "14年", n: 150, delta: +24, tag: "否認" },
+              }},
+              "和解狀況": { options: {
+                "系統無和解因子": { avg: "—", n: 0, delta: 0, tag: "已和解", note: "intellisen殺人案件無和解因子" },
+              }},
+              "特殊情狀": { options: {
+                "§47 累犯": { avg: "14年9.8月", n: 233, delta: +33.8, tag: "累犯", note: "·有期79.4%+無期19.7%+死刑0.9%" },
+              }},
+            },
+          },
+        },
+      },
+    };
+
+    function parseToMonths(str) {
+      if (!str) return 0;
+      let m = 0;
+      const y = str.match(/(\d+)年/), mo = str.match(/([\d.]+)月/), d = str.match(/(\d+)日/);
+      if (y) m += parseInt(y[1]) * 12;
+      if (mo) m += parseFloat(mo[1]);
+      if (d) m += parseInt(d[1]) / 30;
+      return m;
+    }
+    function formatMonths(m) {
+      if (m <= 0) return "—";
+      if (m < 1) return `${Math.round(m * 30)}日`;
+      if (m < 12) return `${m.toFixed(1)}月`;
+      const y = Math.floor(m / 12), r = m % 12;
+      return r < 0.1 ? `${y}年` : `${y}年${r.toFixed(1)}月`;
     }
 
-    /* ──────────────────────── API 呼叫 ──────────────────────── */
-    async function fetchJudgeStats(params, ngrokUrl) {
-      const url = new URL('/search', ngrokUrl);
-      url.searchParams.set('mode', 'judge-stats');
-      if (params.judge) url.searchParams.set('judge', params.judge);
-      if (params.crime) url.searchParams.set('crime', params.crime);
-      if (params.court) url.searchParams.set('court', params.court);
-      if (params.yearFrom) url.searchParams.set('year_from', params.yearFrom);
-      if (params.yearTo) url.searchParams.set('year_to', params.yearTo);
-      const res = await fetch(url.toString(), { headers: { 'Content-Type': 'application/json' } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    }
-
-    async function fetchFts(params, ngrokUrl) {
-      const url = new URL('/search', ngrokUrl);
-      url.searchParams.set('mode', 'fts');
-      params.keywords.forEach(k => url.searchParams.append('fulltext', k));
-      if (params.caseType) url.searchParams.set('case_type', params.caseType);
-      if (params.court) url.searchParams.set('court', params.court);
-      if (params.judge) url.searchParams.set('judge', params.judge);
-      url.searchParams.set('limit', '30');
-      const res = await fetch(url.toString(), { headers: { 'Content-Type': 'application/json' } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    }
-
-    /* ──────────────────────── 主元件 ──────────────────────── */
-    function SentencingPredictor() {
-      const [tab, setTab] = useState('judge'); // 'judge' | 'fts' | 'settings'
-      const [ngrokUrl, setNgrokUrl] = useState(getSavedUrl);
-      const [ngrokInput, setNgrokInput] = useState(getSavedUrl);
-
-      // 法官傾向表單
-      const [judge, setJudge] = useState('');
-      const [crime, setCrime] = useState('');
-      const [court, setCourt] = useState('TCD');
-      const [yearFrom, setYearFrom] = useState('110');
-      const [yearTo, setYearTo] = useState('114');
-      const [mitigating, setMitigating] = useState([]);
-      const [aggravating, setAggravating] = useState([]);
-
-      // FTS 表單
-      const [ftsKeyword, setFtsKeyword] = useState('');
-      const [ftsKeywords, setFtsKeywords] = useState([]);
-      const [ftsCaseType, setFtsCaseType] = useState('M');
-      const [ftsCourt, setFtsCourt] = useState('TCD');
-      const [ftsJudge, setFtsJudge] = useState('');
-
-      // 結果
-      const [loading, setLoading] = useState(false);
-      const [error, setError] = useState('');
-      const [judgeResult, setJudgeResult] = useState(null);
-      const [ftsResult, setFtsResult] = useState(null);
-
-      const connected = Boolean(ngrokUrl);
-
-      function toggleFactor(list, setList, item) {
-        setList(prev => prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]);
-      }
-
-      function addFtsKeyword() {
-        const kw = ftsKeyword.trim();
-        if (kw && !ftsKeywords.includes(kw)) {
-          setFtsKeywords(prev => [...prev, kw]);
-          setFtsKeyword('');
+    function tryCrossLookup(lawKey, tags) {
+      if (tags.length < 2) return null;
+      for (let len = Math.min(tags.length, 4); len >= 2; len--) {
+        const combos = getCombinations(tags, len);
+        for (const combo of combos) {
+          const key = [lawKey, ...combo.sort()].join("|");
+          if (CROSS_FACTOR_LOOKUP[key]) return { ...CROSS_FACTOR_LOOKUP[key], matchLen: len, key };
         }
       }
-
-      async function runJudgeStats() {
-        if (!ngrokUrl) { setError('請先在設定頁填入 ngrok URL'); return; }
-        if (!judge && !crime) { setError('請填入法官姓名或罪名'); return; }
-        setLoading(true); setError(''); setJudgeResult(null);
-        try {
-          const data = await fetchJudgeStats({ judge, crime, court, yearFrom, yearTo }, ngrokUrl);
-          setJudgeResult(data);
-        } catch (e) {
-          setError(`查詢失敗：${e.message}。請確認 ngrok 服務運作中。`);
-        } finally { setLoading(false); }
+      return null;
+    }
+    function getCombinations(arr, len) {
+      if (len === 1) return arr.map(x => [x]);
+      const r = [];
+      for (let i = 0; i < arr.length; i++) {
+        getCombinations(arr.slice(i + 1), len - 1).forEach(c => r.push([arr[i], ...c]));
       }
+      return r;
+    }
 
-      async function runFts() {
-        if (!ngrokUrl) { setError('請先在設定頁填入 ngrok URL'); return; }
-        const kws = ftsKeywords.length ? ftsKeywords : (ftsKeyword.trim() ? [ftsKeyword.trim()] : []);
-        if (!kws.length) { setError('請輸入至少一個關鍵字'); return; }
-        setLoading(true); setError(''); setFtsResult(null);
-        try {
-          const data = await fetchFts({ keywords: kws, caseType: ftsCaseType, court: ftsCourt, judge: ftsJudge }, ngrokUrl);
-          setFtsResult(data);
-        } catch (e) {
-          setError(`查詢失敗：${e.message}。請確認 ngrok 服務運作中。`);
-        } finally { setLoading(false); }
-      }
+    function BarChart({ data, highlightRange, label }) {
+      const max = Math.max(...data.map(d => d.count));
+      const [hovered, setHovered] = useState(null);
+      return (
+        <div style={{ background: "rgba(15,23,42,0.6)", borderRadius: 12, padding: "14px 14px 10px", border: "1px solid rgba(51,65,85,0.5)", backdropFilter: "blur(8px)" }}>
+          {label && <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 10, fontWeight: 600, letterSpacing: "0.5px" }}>{label}</div>}
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 140, padding: "0 4px", borderBottom: "1px solid rgba(71,85,105,0.3)" }}>
+            {data.map((d, i) => {
+              const h = max > 0 ? (d.count / max) * 118 : 0;
+              const hl = highlightRange === d.range;
+              const isHov = hovered === i;
+              return (
+                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: d.count > 0 ? "pointer" : "default" }}
+                  onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}>
+                  <span style={{ fontSize: 9, color: (hl || isHov) ? "#f8fafc" : "#64748b", fontWeight: (hl || isHov) ? 600 : 400, transition: "all 0.2s" }}>{d.count > 0 ? d.count.toLocaleString() : ""}</span>
+                  <div style={{
+                    width: "100%", height: h, minHeight: d.count > 0 ? 4 : 1,
+                    background: hl ? "linear-gradient(180deg, #fbbf24 0%, #f59e0b 40%, #d97706 100%)" : isHov ? "linear-gradient(180deg, #60a5fa 0%, #3b82f6 40%, #2563eb 100%)" : "linear-gradient(180deg, #3b82f6 0%, #2563eb 40%, #1e40af 100%)",
+                    borderRadius: "4px 4px 0 0", transition: "height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s, box-shadow 0.3s, transform 0.2s",
+                    boxShadow: hl ? "0 0 16px rgba(245,158,11,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" : isHov ? "0 0 12px rgba(59,130,246,0.3), inset 0 1px 0 rgba(255,255,255,0.1)" : "inset 0 1px 0 rgba(255,255,255,0.06)",
+                    opacity: d.count === 0 ? 0.08 : 1, transform: isHov && d.count > 0 ? "scaleY(1.03)" : "scaleY(1)", transformOrigin: "bottom",
+                  }} />
+                  <span style={{ fontSize: 8, color: hl ? "#fbbf24" : (isHov ? "#94a3b8" : "#475569"), fontWeight: hl ? 700 : 400, whiteSpace: "nowrap", transition: "color 0.2s" }}>{d.range}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
 
-      /* 量刑建議（本地推算，不需 API） */
-      const sentencingHint = useMemo(() => {
-        if (!judgeResult) return null;
-        const base = judgeResult.avg_months || judgeResult.median_months;
-        if (!base) return null;
-        let adj = 0;
-        if (mitigating.includes('坦承犯行')) adj -= base * 0.15;
-        if (mitigating.includes('初犯（無前科）')) adj -= base * 0.1;
-        if (mitigating.includes('達成和解並賠償')) adj -= base * 0.12;
-        if (mitigating.includes('情堪憫恕')) adj -= base * 0.08;
-        if (mitigating.includes('自首')) adj -= base * 0.1;
-        if (mitigating.includes('主動繳回犯罪所得')) adj -= base * 0.07;
-        if (aggravating.includes('累犯')) adj += base * 0.2;
-        if (aggravating.includes('主謀或首腦')) adj += base * 0.15;
-        if (aggravating.includes('金額重大')) adj += base * 0.12;
-        if (aggravating.includes('手段惡劣')) adj += base * 0.1;
-        const est = Math.max(1, Math.round(base + adj));
-        return { base: Math.round(base), estimated: est, adj: Math.round(adj) };
-      }, [judgeResult, mitigating, aggravating]);
+    function SentenceGauge({ avgMonths, minMonths, maxMonths }) {
+      const range = maxMonths - minMonths;
+      const pos = range > 0 ? ((avgMonths - minMonths) / range) * 100 : 50;
+      return (
+        <div style={{ padding: "10px 0" }}>
+          <div style={{ position: "relative", height: 28, borderRadius: 14, overflow: "hidden", background: "#1e293b", border: "1px solid rgba(51,65,85,0.5)" }}>
+            <div style={{ position: "absolute", inset: 1, borderRadius: 13, background: "linear-gradient(90deg, #059669 0%, #10b981 20%, #eab308 50%, #f97316 75%, #dc2626 100%)", opacity: 0.85 }} />
+            <div style={{ position: "absolute", inset: 0, borderRadius: 14, background: "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 50%, rgba(0,0,0,0.15) 100%)" }} />
+            <div style={{
+              position: "absolute", left: `calc(${Math.min(Math.max(pos, 5), 95)}% - 12px)`, top: 2,
+              width: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg, #f8fafc, #e2e8f0)",
+              boxShadow: "0 2px 10px rgba(0,0,0,0.4), 0 0 0 2px rgba(255,255,255,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "left 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)", zIndex: 2,
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 900, color: "#0f172a" }}>▼</span>
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 7, fontSize: 11 }}>
+            <span style={{ color: "#10b981", fontWeight: 500 }}>最低 {formatMonths(minMonths)}</span>
+            <span style={{ color: "#fbbf24", fontWeight: 800, fontSize: 14, textShadow: "0 0 12px rgba(251,191,36,0.3)" }}>預測 {formatMonths(avgMonths)}</span>
+            <span style={{ color: "#f87171", fontWeight: 500 }}>最高 {formatMonths(maxMonths)}</span>
+          </div>
+        </div>
+      );
+    }
 
-      /* ── 版面 ── */
-      const tabs = [
-        { id: 'judge', label: '⚖️ 法官傾向' },
-        { id: 'fts',   label: '🔍 全文搜尋' },
-        { id: 'settings', label: '⚙️ 設定' },
-      ];
+    function ProbationGauge({ rate, size }) {
+      const s = size || 100;
+      const stroke = 9;
+      const r = (s - stroke) / 2;
+      const circ = 2 * Math.PI * r;
+      const offset = circ - (Math.min(rate, 100) / 100) * circ;
+      const color = rate > 50 ? "#10b981" : rate > 15 ? "#eab308" : rate > 5 ? "#f97316" : "#ef4444";
+      const glow = rate > 50 ? "rgba(16,185,129,0.25)" : rate > 15 ? "rgba(234,179,8,0.2)" : rate > 5 ? "rgba(249,115,22,0.2)" : "rgba(239,68,68,0.2)";
+      return (
+        <div style={{ position: "relative", width: s, height: s, filter: `drop-shadow(0 0 8px ${glow})` }}>
+          <svg width={s} height={s} style={{ transform: "rotate(-90deg)" }}>
+            <circle cx={s/2} cy={s/2} r={r} fill="none" stroke="#1e293b" strokeWidth={stroke} />
+            <circle cx={s/2} cy={s/2} r={r} fill="none" stroke="rgba(51,65,85,0.3)" strokeWidth={stroke} />
+            <circle cx={s/2} cy={s/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+              strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+              style={{ transition: "stroke-dashoffset 1s cubic-bezier(0.34, 1.56, 0.64, 1)", filter: "brightness(1.1)" }} />
+          </svg>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: s * 0.24, fontWeight: 900, color, letterSpacing: "-0.5px" }}>{rate.toFixed(1)}%</span>
+            <span style={{ fontSize: s * 0.1, color: "#64748b", fontWeight: 500, letterSpacing: "0.5px" }}>緩刑率</span>
+          </div>
+        </div>
+      );
+    }
+
+    function SentencingPredictor() {
+      const [crime, setCrime] = useState("詐欺");
+      const [law, setLaw] = useState("");
+      const [selections, setSelections] = useState({});
+      const [showResult, setShowResult] = useState(false);
+      const [activeTab, setActiveTab] = useState("predict");
+      const [isFullscreen, setIsFullscreen] = useState(false);
+      const resultRef = useRef(null);
+      const containerRef = useRef(null);
+
+      const toggleFullscreen = () => setIsFullscreen(f => !f);
+
+      const crimeData = CRIME_DATA[crime];
+      const lawOptions = crimeData ? Object.keys(crimeData.laws) : [];
+      const lawData = crimeData && law ? crimeData.laws[law] : null;
+      const factorGroups = lawData ? lawData.factors : {};
+
+      useEffect(() => { if (lawOptions.length > 0 && !law) setLaw(lawOptions[0]); }, [crime]);
+      useEffect(() => { setSelections({}); setShowResult(false); }, [law]);
+
+      const prediction = useMemo(() => {
+        if (!lawData) return null;
+        const baseMonths = parseToMonths(lawData.recentBaseline?.avg || lawData.baseline.avg);
+        let appliedFactors = [], tags = [];
+
+        Object.entries(selections).forEach(([group, choice]) => {
+          if (!choice || !factorGroups[group]?.options?.[choice]) return;
+          const f = factorGroups[group].options[choice];
+          appliedFactors.push({
+            label: `${group}: ${choice}`, effect: f.delta || 0, n: f.n, tag: f.tag,
+            note: f.note || (f.n > 0 && f.n < 10 ? "樣本過少" : f.n > 0 && f.n < 50 ? "樣本偏少" : null),
+          });
+          if (f.tag) tags.push(f.tag);
+        });
+
+        let crossMatch = tags.length >= 2 ? tryCrossLookup(lawData.lawKey, tags) : null;
+        let predicted, method;
+        if (crossMatch?.n > 0) {
+          predicted = parseToMonths(crossMatch.avg);
+          method = `交叉查表（${crossMatch.matchLen}因子，n=${crossMatch.n.toLocaleString()}）`;
+        } else {
+          const totalDelta = appliedFactors.reduce((s, f) => s + (f.effect || 0), 0);
+          predicted = Math.max(0.5, baseMonths + totalDelta);
+          method = appliedFactors.length === 0 ? "基準線" : "加法模型";
+        }
+        const minSample = appliedFactors.reduce((min, f) => (f.n > 0 && f.n < min ? f.n : min), Infinity);
+        const confidence = appliedFactors.length === 0 ? "基準線"
+          : crossMatch?.n > 100 ? "高（精確交叉數據）"
+          : crossMatch?.n > 0 ? "中（交叉樣本偏少）"
+          : minSample < 10 ? "低（樣本不足）" : minSample < 100 ? "中" : "高";
+
+        const lk = lawData.lawKey;
+        const probBase = PROBATION_LOOKUP[lk];
+        const baseRate = probBase ? getProbationRate(probBase) : null;
+        let probMatch = null, probRate = baseRate;
+        if (tags.length >= 1 && lk) {
+          for (let len = Math.min(tags.length, 3); len >= 1; len--) {
+            const combos = getCombinations(tags, len);
+            for (const combo of combos) {
+              const key = [lk, ...combo.sort()].join("|");
+              if (PROBATION_LOOKUP[key]) { probMatch = { ...PROBATION_LOOKUP[key], key, matchLen: len }; probRate = getProbationRate(probMatch); break; }
+            }
+            if (probMatch) break;
+          }
+        }
+
+        let probQualifiers = [];
+        const has = tag => tags.includes(tag);
+        const minBase = parseToMonths(lawData.baseline.min);
+        if (minBase >= 36) {
+          probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，不符緩刑門檻（§74需2年以下）`, type: "bad" });
+        } else if (minBase >= 24) {
+          probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，緩刑空間極窄`, type: "warn" });
+        }
+        if (has("累犯")) probQualifiers.push({ text: "累犯：緩刑受嚴格限制（§74Ⅰ②），僅「宣判時」距前案執行完畢逾5年者仍有機會", type: "warn" });
+        if (has("坦承") && has("已和解")) probQualifiers.push({ text: "坦承+和解：緩刑最佳組合", type: "good" });
+        else if (has("坦承") && has("賠償")) probQualifiers.push({ text: "坦承+賠償：竊盜案中有利緩刑", type: "good" });
+        if (has("否認")) probQualifiers.push({ text: "否認犯罪：大幅降低緩刑機會", type: "bad" });
+        if (has("未和解") || has("未賠償")) probQualifiers.push({ text: "未和解/未賠償：緩刑機會大幅降低", type: "warn" });
+        if (has("§59")) probQualifiers.push({ text: "§59 情堪憫恕：可大幅降低刑度，進入緩刑門檻", type: "good" });
+
+        if (lk === "§339" && tags.length === 0) {
+          probQualifiers.push({ text: "整體緩刑率 16.6%（1,748/10,513）", type: "info" });
+          probQualifiers.push({ text: "和解是緩刑的幾乎必要條件", type: "info" });
+        } else if (lk === "§339-4" && tags.length === 0) {
+          probQualifiers.push({ text: "整體緩刑率僅 7.6%，§59+和解是唯一高效路徑", type: "warn" });
+        }
+        if (probQualifiers.length === 0 && minBase < 24) {
+          probQualifiers.push({ text: "請選擇案件條件以獲得更精確的緩刑分析", type: "info" });
+        }
+
+        return {
+          baseMonths, predicted, method,
+          min: parseToMonths(lawData.baseline.min), max: parseToMonths(lawData.baseline.max),
+          appliedFactors, confidence, crossMatch,
+          distribution: lawData.distribution,
+          probRate: probRate ?? 0, probMatch, baseRate: baseRate ?? 0, probQualifiers,
+        };
+      }, [lawData, selections]);
+
+      const handlePredict = () => {
+        setShowResult(true);
+        setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+      };
+      const getHighlightRange = (m) => {
+        if (m <= 6) return "6月以下"; if (m <= 12) return "6月~1年";
+        if (m <= 18) return "1年~1.5年"; if (m <= 24) return "1.5年~2年";
+        if (m <= 30) return "2年~2.5年"; if (m <= 36) return "2.5年~3年";
+        return "3年以上";
+      };
+      const confColor = c => c.includes("高") ? "#34d399" : c.includes("中") ? "#fbbf24" : c === "基準線" ? "#94a3b8" : "#f87171";
+      const factorIcon = {"犯後態度":"🗣️","和解狀況":"🤝","被害金額":"💰","加減刑事由":"⚖️","前案紀錄":"📋","共犯角色":"👥","特殊情況":"📌","酒測值":"🍺","行為態樣":"🔄","賠償狀況":"💴","竊盜金額":"💰","加重事由":"⚠️","特殊情狀":"📎","傷勢程度":"🩹"};
 
       return (
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
-          {/* 標題 */}
-          <div style={{ marginBottom: 24 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-              ⚖️ 量刑分析系統
-            </h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: '#94a3b8' }}>王志文律師事務所</span>
-              {connected
-                ? <Badge color="green">● 已連線</Badge>
-                : <Badge color="red">○ 未連線</Badge>}
+        <div ref={containerRef} style={{ minHeight: "100vh", background: "#0f172a", color: "#e2e8f0", fontFamily: "'Noto Sans TC', 'SF Pro Display', -apple-system, sans-serif" }}>
+          <div style={{ background: "linear-gradient(135deg, #1e293b, #0f172a, #1a1a2e)", borderBottom: "1px solid rgba(59,130,246,0.2)", padding: "14px 16px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, boxShadow: "0 4px 12px rgba(59,130,246,0.3)" }}>⚖️</div>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: "0 0 3px 0", fontSize: 13, color: "#60a5fa", letterSpacing: "2px", fontWeight: 700 }}>王志文律師</p>
+                <h1 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#f8fafc", lineHeight: 1.2 }}>量刑分析系統 <span style={{ fontSize: 10, color: "#64748b", fontWeight: 400 }}>v3.2</span></h1>
+                <p style={{ margin: "2px 0 0 0", fontSize: 10, color: "#64748b" }}>司法院量刑資訊系統 · 10罪名 · 含緩刑機會分析</p>
+              </div>
+              <button onClick={toggleFullscreen} title={isFullscreen ? "收合顯示" : "展開顯示"} style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #334155", background: isFullscreen ? "rgba(59,130,246,0.2)" : "rgba(30,41,59,0.6)", color: isFullscreen ? "#60a5fa" : "#94a3b8", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                {isFullscreen ? "⊟" : "⊞"}
+              </button>
             </div>
           </div>
 
-          {/* Tab 列 */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid #e2e8f0', paddingBottom: 0 }}>
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setError(''); }}
-                style={{
-                  padding: '9px 18px', border: 'none', background: 'none',
-                  fontSize: 14, fontWeight: tab === t.id ? 600 : 400,
-                  color: tab === t.id ? '#2563eb' : '#64748b',
-                  borderBottom: `2px solid ${tab === t.id ? '#2563eb' : 'transparent'}`,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  marginBottom: -2,
-                }}>{t.label}</button>
-            ))}
-          </div>
-
-          {/* 錯誤訊息 */}
-          {error && (
-            <div style={{
-              background: '#fef2f2', border: '1px solid #fecaca',
-              borderRadius: 8, padding: '12px 16px', marginBottom: 16,
-              color: '#b91c1c', fontSize: 14,
-            }}>⚠️ {error}</div>
-          )}
-
-          {/* ── Tab: 法官傾向 ── */}
-          {tab === 'judge' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              {/* 左欄：查詢條件 */}
-              <Card>
-                <SectionTitle icon="🔎">查詢條件</SectionTitle>
-                <InputGroup label="法官姓名">
-                  <input style={inputStyle} placeholder="例：林忠澤"
-                    value={judge} onChange={e => setJudge(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && runJudgeStats()} />
-                </InputGroup>
-                <InputGroup label="罪名／案由">
-                  <input style={inputStyle} placeholder="例：詐欺、傷害、竊盜"
-                    value={crime} onChange={e => setCrime(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && runJudgeStats()} />
-                </InputGroup>
-                <InputGroup label="法院">
-                  <select style={inputStyle} value={court} onChange={e => setCourt(e.target.value)}>
-                    {COURTS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </InputGroup>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <InputGroup label="起始年度">
-                    <input style={inputStyle} type="number" placeholder="110"
-                      value={yearFrom} onChange={e => setYearFrom(e.target.value)} />
-                  </InputGroup>
-                  <InputGroup label="結束年度">
-                    <input style={inputStyle} type="number" placeholder="114"
-                      value={yearTo} onChange={e => setYearTo(e.target.value)} />
-                  </InputGroup>
-                </div>
-                <button onClick={runJudgeStats} disabled={loading}
-                  style={{
-                    width: '100%', padding: '10px', borderRadius: 8, border: 'none',
-                    background: loading ? '#93c5fd' : '#2563eb',
-                    color: '#fff', fontSize: 14, fontWeight: 600,
-                    cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                    transition: 'background .15s',
-                  }}>
-                  {loading ? '查詢中…' : '查詢法官傾向'}
-                </button>
-              </Card>
-
-              {/* 右欄：減輕/加重因子 */}
-              <Card>
-                <SectionTitle icon="⚡">量刑因子調整</SectionTitle>
-                <div style={{ marginBottom: 16 }}>
-                  <p style={{ fontSize: 13, color: '#64748b', marginBottom: 10 }}>減輕事由</p>
-                  <CheckGroup items={MITIGATING} selected={mitigating}
-                    onChange={item => toggleFactor(mitigating, setMitigating, item)} />
-                </div>
-                <div>
-                  <p style={{ fontSize: 13, color: '#64748b', marginBottom: 10 }}>加重事由</p>
-                  <CheckGroup items={AGGRAVATING} selected={aggravating}
-                    onChange={item => toggleFactor(aggravating, setAggravating, item)} />
-                </div>
-              </Card>
-
-              {/* 結果欄（跨兩欄） */}
-              {judgeResult && (
-                <Card style={{ gridColumn: '1 / -1' }}>
-                  <SectionTitle icon="📊">分析結果</SectionTitle>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
-                    {[
-                      { label: '樣本數', value: judgeResult.total_cases ?? '—', unit: '件', color: '#2563eb' },
-                      { label: '平均刑期', value: judgeResult.avg_months ? `${judgeResult.avg_months}` : '—', unit: '月', color: '#7c3aed' },
-                      { label: '中位數刑期', value: judgeResult.median_months ? `${judgeResult.median_months}` : '—', unit: '月', color: '#059669' },
-                      { label: '緩刑比例', value: judgeResult.probation_rate ? `${(judgeResult.probation_rate * 100).toFixed(1)}` : '—', unit: '%', color: '#d97706' },
-                    ].map(stat => (
-                      <div key={stat.label} style={{
-                        background: '#f8fafc', borderRadius: 10, padding: '14px 16px',
-                        borderLeft: `4px solid ${stat.color}`,
-                      }}>
-                        <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{stat.label}</p>
-                        <p style={{ fontSize: 24, fontWeight: 700, color: stat.color }}>
-                          {stat.value}<span style={{ fontSize: 14, fontWeight: 400, color: '#64748b', marginLeft: 2 }}>{stat.unit}</span>
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 刑期分佈 */}
-                  {judgeResult.distribution && (
-                    <div style={{ marginBottom: 20 }}>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 12 }}>刑期分佈</p>
-                      {Object.entries(judgeResult.distribution).map(([range, count]) => (
-                        <StatBar key={range} label={range} value={count}
-                          max={Math.max(...Object.values(judgeResult.distribution))} />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 量刑建議 */}
-                  {sentencingHint && (
-                    <div style={{
-                      background: 'linear-gradient(135deg, #eff6ff, #f0fdf4)',
-                      border: '1px solid #bfdbfe', borderRadius: 10, padding: '16px 20px',
-                    }}>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>
-                        💡 量刑預測（含因子調整）
-                      </p>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-                        <span style={{ fontSize: 32, fontWeight: 700, color: '#1d4ed8' }}>
-                          {sentencingHint.estimated}
-                        </span>
-                        <span style={{ color: '#475569' }}>月（估）</span>
-                        {sentencingHint.adj !== 0 && (
-                          <Badge color={sentencingHint.adj < 0 ? 'green' : 'red'}>
-                            {sentencingHint.adj > 0 ? '+' : ''}{sentencingHint.adj} 月
-                          </Badge>
-                        )}
-                      </div>
-                      <p style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
-                        基準：{sentencingHint.base} 月 | 減輕因子：{mitigating.length} 項 | 加重因子：{aggravating.length} 項
-                      </p>
-                      <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                        ⚠️ 以上為統計推算，僅供辯護策略參考，不構成確定性預測。
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 原始 JSON（可展開） */}
-                  <details style={{ marginTop: 16 }}>
-                    <summary style={{ fontSize: 12, color: '#94a3b8', cursor: 'pointer' }}>原始資料</summary>
-                    <pre style={{
-                      marginTop: 8, fontSize: 11, background: '#f8fafc',
-                      borderRadius: 6, padding: 12, overflow: 'auto',
-                      maxHeight: 240, color: '#475569',
-                    }}>{JSON.stringify(judgeResult, null, 2)}</pre>
-                  </details>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {/* ── Tab: 全文搜尋 ── */}
-          {tab === 'fts' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
-              <Card>
-                <SectionTitle icon="🔍">全文搜尋條件</SectionTitle>
-                <InputGroup label="關鍵字（AND 邏輯）">
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input style={{ ...inputStyle, flex: 1 }}
-                      placeholder="例：情堪憫恕"
-                      value={ftsKeyword} onChange={e => setFtsKeyword(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && addFtsKeyword()} />
-                    <button onClick={addFtsKeyword}
-                      style={{
-                        padding: '8px 12px', borderRadius: 8, border: 'none',
-                        background: '#f1f5f9', color: '#475569', cursor: 'pointer',
-                        fontSize: 14, fontFamily: 'inherit',
-                      }}>+</button>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                    {ftsKeywords.map(k => (
-                      <span key={k} style={{
-                        background: '#dbeafe', color: '#1d4ed8', padding: '3px 10px',
-                        borderRadius: 20, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4,
-                      }}>
-                        {k}
-                        <button onClick={() => setFtsKeywords(prev => prev.filter(x => x !== k))}
-                          style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#1d4ed8', padding: 0, lineHeight: 1 }}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                </InputGroup>
-                <InputGroup label="案件類型">
-                  <select style={inputStyle} value={ftsCaseType} onChange={e => setFtsCaseType(e.target.value)}>
-                    {CRIME_TYPES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </InputGroup>
-                <InputGroup label="法院">
-                  <select style={inputStyle} value={ftsCourt} onChange={e => setFtsCourt(e.target.value)}>
-                    {COURTS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </InputGroup>
-                <InputGroup label="法官姓名（選填）">
-                  <input style={inputStyle} placeholder="例：林忠澤"
-                    value={ftsJudge} onChange={e => setFtsJudge(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && runFts()} />
-                </InputGroup>
-                <button onClick={runFts} disabled={loading}
-                  style={{
-                    width: '100%', padding: '10px', borderRadius: 8, border: 'none',
-                    background: loading ? '#93c5fd' : '#2563eb',
-                    color: '#fff', fontSize: 14, fontWeight: 600,
-                    cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                  }}>
-                  {loading ? '搜尋中…' : '⚡ FTS 搜尋'}
-                </button>
-              </Card>
-
-              {/* 搜尋結果 */}
-              <div>
-                {ftsResult && (
-                  <Card>
-                    <SectionTitle icon="📋">
-                      搜尋結果&nbsp;
-                      <Badge color="blue">{ftsResult.total ?? (ftsResult.results?.length ?? 0)} 件</Badge>
-                    </SectionTitle>
-                    {(ftsResult.results || []).length === 0
-                      ? <p style={{ color: '#94a3b8', fontSize: 14 }}>無符合結果</p>
-                      : (ftsResult.results || []).map((r, i) => (
-                        <div key={i} style={{
-                          borderBottom: '1px solid #f1f5f9', paddingBottom: 14, marginBottom: 14,
-                        }}>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>
-                              {r.court || ''} {r.case_id || r.id || `#${i+1}`}
-                            </span>
-                            {r.year && <Badge color="gray">{r.year} 年</Badge>}
-                            {r.judge && <Badge color="blue">{r.judge}</Badge>}
-                            {r.verdict && <Badge color={r.verdict.includes('有罪') ? 'red' : 'green'}>{r.verdict}</Badge>}
-                            {r.sentence_months && (
-                              <Badge color="yellow">{r.sentence_months} 月</Badge>
-                            )}
-                          </div>
-                          {r.snippet && (
-                            <p style={{
-                              fontSize: 13, color: '#475569', lineHeight: 1.7,
-                              background: '#fafafa', borderRadius: 6, padding: '8px 12px',
-                            }} dangerouslySetInnerHTML={{
-                              __html: r.snippet.replace(/\*\*(.*?)\*\*/g, '<mark style="background:#fef08a;padding:0 2px">$1</mark>')
-                            }} />
-                          )}
-                        </div>
-                      ))
-                    }
-                    {ftsResult.results?.length >= 30 && (
-                      <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
-                        顯示前 30 筆，如需更多請加精確關鍵字縮小範圍
-                      </p>
-                    )}
-                  </Card>
-                )}
-                {!ftsResult && !loading && (
-                  <Card style={{ textAlign: 'center', padding: '40px 24px' }}>
-                    <p style={{ fontSize: 40, marginBottom: 12 }}>🔍</p>
-                    <p style={{ color: '#94a3b8', fontSize: 14 }}>輸入關鍵字開始搜尋</p>
-                    <p style={{ color: '#cbd5e1', fontSize: 12, marginTop: 6 }}>
-                      FTS5 全文索引，1,322 萬筆裁判，秒級回應
-                    </p>
-                  </Card>
-                )}
+          <div style={{ padding: isFullscreen ? "14px 8px" : "14px 14px", maxWidth: isFullscreen ? "100%" : 640, margin: "0 auto", transition: "all 0.3s ease" }}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, display: "block", marginBottom: 6 }}>① 罪名</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {Object.keys(CRIME_DATA).map(c => (
+                  <button key={c} onClick={() => { setCrime(c); setLaw(""); setSelections({}); setShowResult(false); }}
+                    style={{ padding: "6px 13px", borderRadius: 7, border: `1px solid ${crime === c ? "#3b82f6" : "#334155"}`, background: crime === c ? "rgba(59,130,246,0.15)" : "transparent", color: crime === c ? "#60a5fa" : "#94a3b8", fontSize: 12, fontWeight: crime === c ? 700 : 400, cursor: "pointer" }}>{c}</button>
+                ))}
               </div>
             </div>
-          )}
 
-          {/* ── Tab: 設定 ── */}
-          {tab === 'settings' && (
-            <Card style={{ maxWidth: 480 }}>
-              <SectionTitle icon="⚙️">連線設定</SectionTitle>
-              <InputGroup label="ngrok URL（本機 MCP 服務位址）">
-                <input style={inputStyle}
-                  placeholder="https://xxxx.ngrok-free.app"
-                  value={ngrokInput}
-                  onChange={e => setNgrokInput(e.target.value)} />
-              </InputGroup>
-              <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16 }}>
-                啟動本機 ngrok 服務後，將 URL 貼上即可連線到 1,322 萬筆裁判資料庫。
-              </p>
-              <button onClick={() => {
-                const url = ngrokInput.trim().replace(/\/$/, '');
-                setNgrokUrl(url);
-                saveUrl(url);
-                setError('');
-                alert(url ? '已儲存連線設定' : '已清除連線設定');
-              }} style={{
-                padding: '10px 20px', borderRadius: 8, border: 'none',
-                background: '#2563eb', color: '#fff', fontSize: 14, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}>儲存</button>
-              {ngrokUrl && (
-                <p style={{ marginTop: 12, fontSize: 13, color: '#059669' }}>
-                  ✓ 目前連線：{ngrokUrl}
-                </p>
-              )}
-              <hr style={{ margin: '24px 0', borderColor: '#f1f5f9' }} />
-              <p style={{ fontSize: 12, color: '#94a3b8' }}>
-                版本 v1.0 · 王志文律師事務所專用 · 裁判 DB 1,322 萬筆 · 207 GB
-              </p>
-            </Card>
-          )}
+            {crimeData && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, display: "block", marginBottom: 6 }}>② 適用法條</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {lawOptions.map(l => (
+                    <button key={l} onClick={() => { setLaw(l); setSelections({}); setShowResult(false); }}
+                      style={{ padding: "9px 13px", borderRadius: 7, border: `1px solid ${law === l ? "#3b82f6" : "#1e293b"}`, background: law === l ? "rgba(59,130,246,0.1)" : "#1e293b", color: law === l ? "#60a5fa" : "#cbd5e1", fontSize: 13, fontWeight: law === l ? 600 : 400, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between" }}>
+                      <span>{l}</span>
+                      <span style={{ fontSize: 10, color: "#64748b" }}>n={crimeData.laws[l].baseline.n.toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {lawData && (
+              <div style={{ background: "#1e293b", borderRadius: 10, padding: 12, marginBottom: 14, border: "1px solid #334155" }}>
+                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 5 }}>基準線</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  <div><div style={{ fontSize: 20, fontWeight: 800, color: "#f8fafc" }}>{(lawData.recentBaseline || lawData.baseline).avg}</div><div style={{ fontSize: 10, color: "#64748b" }}>平均</div></div>
+                  <div><div style={{ fontSize: 14, fontWeight: 600, color: "#059669" }}>{lawData.baseline.min}</div><div style={{ fontSize: 10, color: "#64748b" }}>最低</div></div>
+                  <div><div style={{ fontSize: 14, fontWeight: 600, color: "#dc2626" }}>{lawData.baseline.max}</div><div style={{ fontSize: 10, color: "#64748b" }}>最高</div></div>
+                </div>
+              </div>
+            )}
+
+            {lawData && Object.keys(factorGroups).length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, display: "block", marginBottom: 8 }}>③ 案件條件</label>
+                {Object.entries(factorGroups).map(([group, gd]) => (
+                  <div key={group} style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, color: "#cbd5e1", fontWeight: 600, marginBottom: 5 }}>
+                      {factorIcon[group]||"📎"} {group}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {Object.entries(gd.options).map(([name, od]) => {
+                        const sel = selections[group] === name;
+                        const dc = od.delta < 0 ? "#059669" : od.delta > 0 ? "#dc2626" : "#64748b";
+                        return (
+                          <button key={name} onClick={() => { setSelections(p => ({ ...p, [group]: p[group] === name ? undefined : name })); setShowResult(false); }}
+                            style={{ padding: "6px 11px", borderRadius: 7, border: `1px solid ${sel ? dc : "#334155"}`, background: sel ? `${dc}18` : "#0f172a", color: sel ? "#f8fafc" : "#94a3b8", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                            <span>{name}</span>
+                            <span style={{ fontSize: 10, color: dc, fontWeight: 700 }}>{od.delta > 0 ? "+" : ""}{od.delta}月</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selections[group] && gd.options[selections[group]]?.note && (
+                      <div style={{ marginTop: 5, padding: "6px 10px", borderRadius: 6, background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.15)", fontSize: 11, color: "#fbbf24", lineHeight: 1.5, display: "flex", gap: 5, alignItems: "flex-start" }}>
+                        <span style={{ flexShrink: 0 }}>💡</span>
+                        <span>{gd.options[selections[group]].note}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {lawData && (
+              <button onClick={handlePredict} style={{ width: "100%", padding: "12px", borderRadius: 10, border: "none", cursor: "pointer", background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", color: "#fff", fontSize: 15, fontWeight: 700, boxShadow: "0 4px 16px rgba(59,130,246,0.3)", marginBottom: 18 }}>
+                ⚖️ 預測量刑 &amp; 緩刑機會
+              </button>
+            )}
+
+            {showResult && prediction && (
+              <div ref={resultRef} style={{ background: "linear-gradient(135deg, #1e293b, #1a1a2e)", borderRadius: 14, padding: 16, marginBottom: 18, border: "1px solid rgba(59,130,246,0.2)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", animation: "fadeIn 0.5s ease-out" }}>
+                <style>{`@keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }`}</style>
+                <div style={{ display: "flex", gap: 3, marginBottom: 14, background: "#0f172a", borderRadius: 8, padding: 3 }}>
+                  {[{ key: "predict", label: "⚖️ 量刑預測" }, { key: "probation", label: "🏛️ 緩刑機會" }].map(t => (
+                    <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ flex: 1, padding: "7px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: activeTab === t.key ? "#334155" : "transparent", color: activeTab === t.key ? "#f8fafc" : "#64748b", fontSize: 12, fontWeight: activeTab === t.key ? 700 : 400 }}>{t.label}</button>
+                  ))}
+                </div>
+
+                {activeTab === "predict" && (
+                  <>
+                    <div style={{ textAlign: "center", marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>預測量刑</div>
+                      <div style={{ fontSize: 34, fontWeight: 900, background: "linear-gradient(135deg, #60a5fa, #a78bfa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{formatMonths(prediction.predicted)}</div>
+                      <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 3, flexWrap: "wrap" }}>
+                        <span style={{ padding: "2px 8px", borderRadius: 12, fontSize: 10, fontWeight: 600, background: `${confColor(prediction.confidence)}15`, color: confColor(prediction.confidence) }}>{prediction.confidence}</span>
+                        <span style={{ padding: "2px 8px", borderRadius: 12, fontSize: 10, background: "rgba(59,130,246,0.1)", color: "#60a5fa" }}>{prediction.method}</span>
+                      </div>
+                    </div>
+                    <SentenceGauge avgMonths={prediction.predicted} minMonths={prediction.min} maxMonths={prediction.max} />
+                    {prediction.appliedFactors.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 5 }}>已套用因子</div>
+                        {prediction.appliedFactors.map((f, i) => {
+                          const c = f.effect < 0 ? "#059669" : f.effect > 0 ? "#dc2626" : "#64748b";
+                          return (
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 9px", borderRadius: 6, background: `${c}08`, border: `1px solid ${c}18`, marginBottom: 3 }}>
+                              <span style={{ fontSize: 12, color: "#e2e8f0" }}>{f.label}</span>
+                              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                                {f.note && <span style={{ fontSize: 9, color: "#94a3b8" }}>{f.note}</span>}
+                                <span style={{ fontSize: 11, fontWeight: 700, color: c }}>{f.effect > 0 ? "+" : ""}{f.effect.toFixed(1)}月</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {prediction.crossMatch && (
+                          <div style={{ marginTop: 6, padding: "5px 9px", borderRadius: 6, background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.18)", fontSize: 11, color: "#a78bfa" }}>
+                            ✨ 精確交叉數據：n={prediction.crossMatch.n.toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {prediction.distribution && (
+                      <div style={{ marginTop: 14 }}>
+                        <BarChart data={prediction.distribution} highlightRange={getHighlightRange(prediction.predicted)} label="歷史判決分佈" />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {activeTab === "probation" && (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
+                      <ProbationGauge rate={prediction.probRate} size={100} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", marginBottom: 4 }}>
+                          {prediction.probMatch ? "條件匹配緩刑率" : "整體緩刑率"}
+                        </div>
+                        {prediction.probMatch && (
+                          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 4 }}>
+                            匹配：{prediction.probMatch.key.split("|").slice(1).join(" + ")}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      {prediction.probQualifiers.map((q, i) => {
+                        const c = q.type === "good" ? "#059669" : q.type === "bad" ? "#dc2626" : q.type === "warn" ? "#f97316" : "#64748b";
+                        const icon = q.type === "good" ? "✅" : q.type === "bad" ? "❌" : q.type === "warn" ? "⚠️" : "ℹ️";
+                        return (
+                          <div key={i} style={{ padding: "7px 10px", borderRadius: 7, background: `${c}0a`, border: `1px solid ${c}18`, fontSize: 12, color: "#e2e8f0", display: "flex", gap: 6, alignItems: "flex-start" }}>
+                            <span>{icon}</span><span>{q.text}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ marginTop: 14, padding: 12, borderRadius: 8, background: "#0f172a", border: "1px solid #334155" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#f8fafc", marginBottom: 8 }}>📌 緩刑條件（刑法§74）</div>
+                      <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.8 }}>
+                        <div>1. 受<b>2年以下有期徒刑</b>、拘役或罰金之宣告</div>
+                        <div>2. 未曾因故意犯罪受有期徒刑以上刑之宣告；或執行完畢5年內未再犯</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 14, padding: 8, borderRadius: 6, background: "rgba(234,179,8,0.04)", border: "1px solid rgba(234,179,8,0.1)", fontSize: 10, color: "#94a3b8", lineHeight: 1.5 }}>
+                  <b style={{ color: "#fbbf24" }}>⚠️</b> 本預測基於歷史統計，供律師內部參考，不代表個案判決結果。
+                </div>
+              </div>
+            )}
+
+            <div style={{ textAlign: "center", padding: "18px 0 14px", fontSize: 10, color: "#475569", lineHeight: 1.6 }}>
+              <span style={{ letterSpacing: "2px", fontWeight: 700, color: "#60a5fa", fontSize: 11 }}>王志文律師</span>
+              <br />
+              <span>司法院量刑資訊系統 · 10罪名 · 2026-03-24 更新</span>
+            </div>
+          </div>
         </div>
       );
     }
