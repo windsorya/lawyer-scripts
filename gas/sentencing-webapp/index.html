@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>量刑分析系統 — 王志文律師</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background: #f4f6f9;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useRef, useCallback } = React;
+
+    /* ──────────────────────── 常數 ──────────────────────── */
+    const COURTS = [
+      { value: '', label: '全部法院' },
+      { value: 'TCD', label: '臺中地院' },
+      { value: 'TCH', label: '高院臺中分院' },
+      { value: 'TPD', label: '臺北地院' },
+      { value: 'TPH', label: '臺灣高院' },
+      { value: 'KSD', label: '高雄地院' },
+      { value: 'KSH', label: '高院高雄分院' },
+      { value: 'TND', label: '臺南地院' },
+      { value: 'TNH', label: '高院臺南分院' },
+      { value: 'CHD', label: '彰化地院' },
+      { value: 'NTD', label: '新北地院' },
+      { value: 'SLD', label: '士林地院' },
+    ];
+
+    const CRIME_TYPES = [
+      { value: 'M', label: '刑事' },
+      { value: 'V', label: '民事' },
+      { value: 'A', label: '行政訴訟' },
+    ];
+
+    const MITIGATING = [
+      '坦承犯行',
+      '初犯（無前科）',
+      '達成和解並賠償',
+      '情堪憫恕',
+      '自首',
+      '犯後態度良好',
+      '家庭因素（有需扶養之人）',
+      '主動繳回犯罪所得',
+      '積極配合偵查',
+    ];
+
+    const AGGRAVATING = [
+      '累犯',
+      '主謀或首腦',
+      '被害人多數',
+      '金額重大',
+      '手段惡劣',
+      '犯後態度不佳',
+      '未達成和解',
+      '前科累累',
+    ];
+
+    const NGROK_KEY = 'NGROK_URL';
+
+    /* ──────────────────────── 工具函式 ──────────────────────── */
+    function getSavedUrl() {
+      try { return localStorage.getItem(NGROK_KEY) || ''; } catch { return ''; }
+    }
+    function saveUrl(url) {
+      try { localStorage.setItem(NGROK_KEY, url); } catch {}
+    }
+
+    /* ──────────────────────── 子元件 ──────────────────────── */
+
+    function Badge({ color, children }) {
+      const colors = {
+        blue:   { bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd' },
+        green:  { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
+        red:    { bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' },
+        yellow: { bg: '#fef9c3', text: '#854d0e', border: '#fde047' },
+        gray:   { bg: '#f3f4f6', text: '#374151', border: '#d1d5db' },
+      };
+      const c = colors[color] || colors.gray;
+      return (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center',
+          padding: '2px 8px', borderRadius: 9999,
+          fontSize: 12, fontWeight: 500,
+          background: c.bg, color: c.text,
+          border: `1px solid ${c.border}`,
+        }}>{children}</span>
+      );
+    }
+
+    function Card({ children, style }) {
+      return (
+        <div style={{
+          background: '#fff', borderRadius: 12,
+          boxShadow: '0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06)',
+          padding: '20px 24px', ...style,
+        }}>{children}</div>
+      );
+    }
+
+    function SectionTitle({ icon, children }) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <span style={{ fontSize: 20 }}>{icon}</span>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b' }}>{children}</h2>
+        </div>
+      );
+    }
+
+    function InputGroup({ label, children }) {
+      return (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#475569', marginBottom: 6 }}>
+            {label}
+          </label>
+          {children}
+        </div>
+      );
+    }
+
+    const inputStyle = {
+      width: '100%', padding: '8px 12px',
+      border: '1.5px solid #e2e8f0', borderRadius: 8,
+      fontSize: 14, color: '#1e293b',
+      outline: 'none', transition: 'border .15s',
+      fontFamily: 'inherit',
+    };
+
+    function CheckGroup({ items, selected, onChange }) {
+      return (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {items.map(item => {
+            const active = selected.includes(item);
+            return (
+              <button key={item} onClick={() => onChange(item)}
+                style={{
+                  padding: '5px 12px', borderRadius: 20, fontSize: 13,
+                  border: `1.5px solid ${active ? '#3b82f6' : '#e2e8f0'}`,
+                  background: active ? '#eff6ff' : '#fff',
+                  color: active ? '#1d4ed8' : '#64748b',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  fontWeight: active ? 500 : 400,
+                  transition: 'all .15s',
+                }}>
+                {active ? '✓ ' : ''}{item}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    function StatBar({ label, value, max, color }) {
+      const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+      return (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
+            <span style={{ color: '#475569' }}>{label}</span>
+            <span style={{ fontWeight: 600, color: '#1e293b' }}>{value} 件（{pct}%）</span>
+          </div>
+          <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 4, width: `${pct}%`,
+              background: color || '#3b82f6', transition: 'width .4s ease',
+            }} />
+          </div>
+        </div>
+      );
+    }
+
+    /* ──────────────────────── API 呼叫 ──────────────────────── */
+    async function fetchJudgeStats(params, ngrokUrl) {
+      const url = new URL('/search', ngrokUrl);
+      url.searchParams.set('mode', 'judge-stats');
+      if (params.judge) url.searchParams.set('judge', params.judge);
+      if (params.crime) url.searchParams.set('crime', params.crime);
+      if (params.court) url.searchParams.set('court', params.court);
+      if (params.yearFrom) url.searchParams.set('year_from', params.yearFrom);
+      if (params.yearTo) url.searchParams.set('year_to', params.yearTo);
+      const res = await fetch(url.toString(), { headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function fetchFts(params, ngrokUrl) {
+      const url = new URL('/search', ngrokUrl);
+      url.searchParams.set('mode', 'fts');
+      params.keywords.forEach(k => url.searchParams.append('fulltext', k));
+      if (params.caseType) url.searchParams.set('case_type', params.caseType);
+      if (params.court) url.searchParams.set('court', params.court);
+      if (params.judge) url.searchParams.set('judge', params.judge);
+      url.searchParams.set('limit', '30');
+      const res = await fetch(url.toString(), { headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    /* ──────────────────────── 主元件 ──────────────────────── */
+    function SentencingPredictor() {
+      const [tab, setTab] = useState('judge'); // 'judge' | 'fts' | 'settings'
+      const [ngrokUrl, setNgrokUrl] = useState(getSavedUrl);
+      const [ngrokInput, setNgrokInput] = useState(getSavedUrl);
+
+      // 法官傾向表單
+      const [judge, setJudge] = useState('');
+      const [crime, setCrime] = useState('');
+      const [court, setCourt] = useState('TCD');
+      const [yearFrom, setYearFrom] = useState('110');
+      const [yearTo, setYearTo] = useState('114');
+      const [mitigating, setMitigating] = useState([]);
+      const [aggravating, setAggravating] = useState([]);
+
+      // FTS 表單
+      const [ftsKeyword, setFtsKeyword] = useState('');
+      const [ftsKeywords, setFtsKeywords] = useState([]);
+      const [ftsCaseType, setFtsCaseType] = useState('M');
+      const [ftsCourt, setFtsCourt] = useState('TCD');
+      const [ftsJudge, setFtsJudge] = useState('');
+
+      // 結果
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+      const [judgeResult, setJudgeResult] = useState(null);
+      const [ftsResult, setFtsResult] = useState(null);
+
+      const connected = Boolean(ngrokUrl);
+
+      function toggleFactor(list, setList, item) {
+        setList(prev => prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]);
+      }
+
+      function addFtsKeyword() {
+        const kw = ftsKeyword.trim();
+        if (kw && !ftsKeywords.includes(kw)) {
+          setFtsKeywords(prev => [...prev, kw]);
+          setFtsKeyword('');
+        }
+      }
+
+      async function runJudgeStats() {
+        if (!ngrokUrl) { setError('請先在設定頁填入 ngrok URL'); return; }
+        if (!judge && !crime) { setError('請填入法官姓名或罪名'); return; }
+        setLoading(true); setError(''); setJudgeResult(null);
+        try {
+          const data = await fetchJudgeStats({ judge, crime, court, yearFrom, yearTo }, ngrokUrl);
+          setJudgeResult(data);
+        } catch (e) {
+          setError(`查詢失敗：${e.message}。請確認 ngrok 服務運作中。`);
+        } finally { setLoading(false); }
+      }
+
+      async function runFts() {
+        if (!ngrokUrl) { setError('請先在設定頁填入 ngrok URL'); return; }
+        const kws = ftsKeywords.length ? ftsKeywords : (ftsKeyword.trim() ? [ftsKeyword.trim()] : []);
+        if (!kws.length) { setError('請輸入至少一個關鍵字'); return; }
+        setLoading(true); setError(''); setFtsResult(null);
+        try {
+          const data = await fetchFts({ keywords: kws, caseType: ftsCaseType, court: ftsCourt, judge: ftsJudge }, ngrokUrl);
+          setFtsResult(data);
+        } catch (e) {
+          setError(`查詢失敗：${e.message}。請確認 ngrok 服務運作中。`);
+        } finally { setLoading(false); }
+      }
+
+      /* 量刑建議（本地推算，不需 API） */
+      const sentencingHint = useMemo(() => {
+        if (!judgeResult) return null;
+        const base = judgeResult.avg_months || judgeResult.median_months;
+        if (!base) return null;
+        let adj = 0;
+        if (mitigating.includes('坦承犯行')) adj -= base * 0.15;
+        if (mitigating.includes('初犯（無前科）')) adj -= base * 0.1;
+        if (mitigating.includes('達成和解並賠償')) adj -= base * 0.12;
+        if (mitigating.includes('情堪憫恕')) adj -= base * 0.08;
+        if (mitigating.includes('自首')) adj -= base * 0.1;
+        if (mitigating.includes('主動繳回犯罪所得')) adj -= base * 0.07;
+        if (aggravating.includes('累犯')) adj += base * 0.2;
+        if (aggravating.includes('主謀或首腦')) adj += base * 0.15;
+        if (aggravating.includes('金額重大')) adj += base * 0.12;
+        if (aggravating.includes('手段惡劣')) adj += base * 0.1;
+        const est = Math.max(1, Math.round(base + adj));
+        return { base: Math.round(base), estimated: est, adj: Math.round(adj) };
+      }, [judgeResult, mitigating, aggravating]);
+
+      /* ── 版面 ── */
+      const tabs = [
+        { id: 'judge', label: '⚖️ 法官傾向' },
+        { id: 'fts',   label: '🔍 全文搜尋' },
+        { id: 'settings', label: '⚙️ 設定' },
+      ];
+
+      return (
+        <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
+          {/* 標題 */}
+          <div style={{ marginBottom: 24 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+              ⚖️ 量刑分析系統
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: '#94a3b8' }}>王志文律師事務所</span>
+              {connected
+                ? <Badge color="green">● 已連線</Badge>
+                : <Badge color="red">○ 未連線</Badge>}
+            </div>
+          </div>
+
+          {/* Tab 列 */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid #e2e8f0', paddingBottom: 0 }}>
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => { setTab(t.id); setError(''); }}
+                style={{
+                  padding: '9px 18px', border: 'none', background: 'none',
+                  fontSize: 14, fontWeight: tab === t.id ? 600 : 400,
+                  color: tab === t.id ? '#2563eb' : '#64748b',
+                  borderBottom: `2px solid ${tab === t.id ? '#2563eb' : 'transparent'}`,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  marginBottom: -2,
+                }}>{t.label}</button>
+            ))}
+          </div>
+
+          {/* 錯誤訊息 */}
+          {error && (
+            <div style={{
+              background: '#fef2f2', border: '1px solid #fecaca',
+              borderRadius: 8, padding: '12px 16px', marginBottom: 16,
+              color: '#b91c1c', fontSize: 14,
+            }}>⚠️ {error}</div>
+          )}
+
+          {/* ── Tab: 法官傾向 ── */}
+          {tab === 'judge' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {/* 左欄：查詢條件 */}
+              <Card>
+                <SectionTitle icon="🔎">查詢條件</SectionTitle>
+                <InputGroup label="法官姓名">
+                  <input style={inputStyle} placeholder="例：林忠澤"
+                    value={judge} onChange={e => setJudge(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && runJudgeStats()} />
+                </InputGroup>
+                <InputGroup label="罪名／案由">
+                  <input style={inputStyle} placeholder="例：詐欺、傷害、竊盜"
+                    value={crime} onChange={e => setCrime(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && runJudgeStats()} />
+                </InputGroup>
+                <InputGroup label="法院">
+                  <select style={inputStyle} value={court} onChange={e => setCourt(e.target.value)}>
+                    {COURTS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </InputGroup>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <InputGroup label="起始年度">
+                    <input style={inputStyle} type="number" placeholder="110"
+                      value={yearFrom} onChange={e => setYearFrom(e.target.value)} />
+                  </InputGroup>
+                  <InputGroup label="結束年度">
+                    <input style={inputStyle} type="number" placeholder="114"
+                      value={yearTo} onChange={e => setYearTo(e.target.value)} />
+                  </InputGroup>
+                </div>
+                <button onClick={runJudgeStats} disabled={loading}
+                  style={{
+                    width: '100%', padding: '10px', borderRadius: 8, border: 'none',
+                    background: loading ? '#93c5fd' : '#2563eb',
+                    color: '#fff', fontSize: 14, fontWeight: 600,
+                    cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                    transition: 'background .15s',
+                  }}>
+                  {loading ? '查詢中…' : '查詢法官傾向'}
+                </button>
+              </Card>
+
+              {/* 右欄：減輕/加重因子 */}
+              <Card>
+                <SectionTitle icon="⚡">量刑因子調整</SectionTitle>
+                <div style={{ marginBottom: 16 }}>
+                  <p style={{ fontSize: 13, color: '#64748b', marginBottom: 10 }}>減輕事由</p>
+                  <CheckGroup items={MITIGATING} selected={mitigating}
+                    onChange={item => toggleFactor(mitigating, setMitigating, item)} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 13, color: '#64748b', marginBottom: 10 }}>加重事由</p>
+                  <CheckGroup items={AGGRAVATING} selected={aggravating}
+                    onChange={item => toggleFactor(aggravating, setAggravating, item)} />
+                </div>
+              </Card>
+
+              {/* 結果欄（跨兩欄） */}
+              {judgeResult && (
+                <Card style={{ gridColumn: '1 / -1' }}>
+                  <SectionTitle icon="📊">分析結果</SectionTitle>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
+                    {[
+                      { label: '樣本數', value: judgeResult.total_cases ?? '—', unit: '件', color: '#2563eb' },
+                      { label: '平均刑期', value: judgeResult.avg_months ? `${judgeResult.avg_months}` : '—', unit: '月', color: '#7c3aed' },
+                      { label: '中位數刑期', value: judgeResult.median_months ? `${judgeResult.median_months}` : '—', unit: '月', color: '#059669' },
+                      { label: '緩刑比例', value: judgeResult.probation_rate ? `${(judgeResult.probation_rate * 100).toFixed(1)}` : '—', unit: '%', color: '#d97706' },
+                    ].map(stat => (
+                      <div key={stat.label} style={{
+                        background: '#f8fafc', borderRadius: 10, padding: '14px 16px',
+                        borderLeft: `4px solid ${stat.color}`,
+                      }}>
+                        <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{stat.label}</p>
+                        <p style={{ fontSize: 24, fontWeight: 700, color: stat.color }}>
+                          {stat.value}<span style={{ fontSize: 14, fontWeight: 400, color: '#64748b', marginLeft: 2 }}>{stat.unit}</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 刑期分佈 */}
+                  {judgeResult.distribution && (
+                    <div style={{ marginBottom: 20 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 12 }}>刑期分佈</p>
+                      {Object.entries(judgeResult.distribution).map(([range, count]) => (
+                        <StatBar key={range} label={range} value={count}
+                          max={Math.max(...Object.values(judgeResult.distribution))} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 量刑建議 */}
+                  {sentencingHint && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #eff6ff, #f0fdf4)',
+                      border: '1px solid #bfdbfe', borderRadius: 10, padding: '16px 20px',
+                    }}>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>
+                        💡 量刑預測（含因子調整）
+                      </p>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+                        <span style={{ fontSize: 32, fontWeight: 700, color: '#1d4ed8' }}>
+                          {sentencingHint.estimated}
+                        </span>
+                        <span style={{ color: '#475569' }}>月（估）</span>
+                        {sentencingHint.adj !== 0 && (
+                          <Badge color={sentencingHint.adj < 0 ? 'green' : 'red'}>
+                            {sentencingHint.adj > 0 ? '+' : ''}{sentencingHint.adj} 月
+                          </Badge>
+                        )}
+                      </div>
+                      <p style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
+                        基準：{sentencingHint.base} 月 | 減輕因子：{mitigating.length} 項 | 加重因子：{aggravating.length} 項
+                      </p>
+                      <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                        ⚠️ 以上為統計推算，僅供辯護策略參考，不構成確定性預測。
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 原始 JSON（可展開） */}
+                  <details style={{ marginTop: 16 }}>
+                    <summary style={{ fontSize: 12, color: '#94a3b8', cursor: 'pointer' }}>原始資料</summary>
+                    <pre style={{
+                      marginTop: 8, fontSize: 11, background: '#f8fafc',
+                      borderRadius: 6, padding: 12, overflow: 'auto',
+                      maxHeight: 240, color: '#475569',
+                    }}>{JSON.stringify(judgeResult, null, 2)}</pre>
+                  </details>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* ── Tab: 全文搜尋 ── */}
+          {tab === 'fts' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
+              <Card>
+                <SectionTitle icon="🔍">全文搜尋條件</SectionTitle>
+                <InputGroup label="關鍵字（AND 邏輯）">
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input style={{ ...inputStyle, flex: 1 }}
+                      placeholder="例：情堪憫恕"
+                      value={ftsKeyword} onChange={e => setFtsKeyword(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && addFtsKeyword()} />
+                    <button onClick={addFtsKeyword}
+                      style={{
+                        padding: '8px 12px', borderRadius: 8, border: 'none',
+                        background: '#f1f5f9', color: '#475569', cursor: 'pointer',
+                        fontSize: 14, fontFamily: 'inherit',
+                      }}>+</button>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {ftsKeywords.map(k => (
+                      <span key={k} style={{
+                        background: '#dbeafe', color: '#1d4ed8', padding: '3px 10px',
+                        borderRadius: 20, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4,
+                      }}>
+                        {k}
+                        <button onClick={() => setFtsKeywords(prev => prev.filter(x => x !== k))}
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#1d4ed8', padding: 0, lineHeight: 1 }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                </InputGroup>
+                <InputGroup label="案件類型">
+                  <select style={inputStyle} value={ftsCaseType} onChange={e => setFtsCaseType(e.target.value)}>
+                    {CRIME_TYPES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </InputGroup>
+                <InputGroup label="法院">
+                  <select style={inputStyle} value={ftsCourt} onChange={e => setFtsCourt(e.target.value)}>
+                    {COURTS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </InputGroup>
+                <InputGroup label="法官姓名（選填）">
+                  <input style={inputStyle} placeholder="例：林忠澤"
+                    value={ftsJudge} onChange={e => setFtsJudge(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && runFts()} />
+                </InputGroup>
+                <button onClick={runFts} disabled={loading}
+                  style={{
+                    width: '100%', padding: '10px', borderRadius: 8, border: 'none',
+                    background: loading ? '#93c5fd' : '#2563eb',
+                    color: '#fff', fontSize: 14, fontWeight: 600,
+                    cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                  }}>
+                  {loading ? '搜尋中…' : '⚡ FTS 搜尋'}
+                </button>
+              </Card>
+
+              {/* 搜尋結果 */}
+              <div>
+                {ftsResult && (
+                  <Card>
+                    <SectionTitle icon="📋">
+                      搜尋結果&nbsp;
+                      <Badge color="blue">{ftsResult.total ?? (ftsResult.results?.length ?? 0)} 件</Badge>
+                    </SectionTitle>
+                    {(ftsResult.results || []).length === 0
+                      ? <p style={{ color: '#94a3b8', fontSize: 14 }}>無符合結果</p>
+                      : (ftsResult.results || []).map((r, i) => (
+                        <div key={i} style={{
+                          borderBottom: '1px solid #f1f5f9', paddingBottom: 14, marginBottom: 14,
+                        }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>
+                              {r.court || ''} {r.case_id || r.id || `#${i+1}`}
+                            </span>
+                            {r.year && <Badge color="gray">{r.year} 年</Badge>}
+                            {r.judge && <Badge color="blue">{r.judge}</Badge>}
+                            {r.verdict && <Badge color={r.verdict.includes('有罪') ? 'red' : 'green'}>{r.verdict}</Badge>}
+                            {r.sentence_months && (
+                              <Badge color="yellow">{r.sentence_months} 月</Badge>
+                            )}
+                          </div>
+                          {r.snippet && (
+                            <p style={{
+                              fontSize: 13, color: '#475569', lineHeight: 1.7,
+                              background: '#fafafa', borderRadius: 6, padding: '8px 12px',
+                            }} dangerouslySetInnerHTML={{
+                              __html: r.snippet.replace(/\*\*(.*?)\*\*/g, '<mark style="background:#fef08a;padding:0 2px">$1</mark>')
+                            }} />
+                          )}
+                        </div>
+                      ))
+                    }
+                    {ftsResult.results?.length >= 30 && (
+                      <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
+                        顯示前 30 筆，如需更多請加精確關鍵字縮小範圍
+                      </p>
+                    )}
+                  </Card>
+                )}
+                {!ftsResult && !loading && (
+                  <Card style={{ textAlign: 'center', padding: '40px 24px' }}>
+                    <p style={{ fontSize: 40, marginBottom: 12 }}>🔍</p>
+                    <p style={{ color: '#94a3b8', fontSize: 14 }}>輸入關鍵字開始搜尋</p>
+                    <p style={{ color: '#cbd5e1', fontSize: 12, marginTop: 6 }}>
+                      FTS5 全文索引，1,322 萬筆裁判，秒級回應
+                    </p>
+                  </Card>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Tab: 設定 ── */}
+          {tab === 'settings' && (
+            <Card style={{ maxWidth: 480 }}>
+              <SectionTitle icon="⚙️">連線設定</SectionTitle>
+              <InputGroup label="ngrok URL（本機 MCP 服務位址）">
+                <input style={inputStyle}
+                  placeholder="https://xxxx.ngrok-free.app"
+                  value={ngrokInput}
+                  onChange={e => setNgrokInput(e.target.value)} />
+              </InputGroup>
+              <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16 }}>
+                啟動本機 ngrok 服務後，將 URL 貼上即可連線到 1,322 萬筆裁判資料庫。
+              </p>
+              <button onClick={() => {
+                const url = ngrokInput.trim().replace(/\/$/, '');
+                setNgrokUrl(url);
+                saveUrl(url);
+                setError('');
+                alert(url ? '已儲存連線設定' : '已清除連線設定');
+              }} style={{
+                padding: '10px 20px', borderRadius: 8, border: 'none',
+                background: '#2563eb', color: '#fff', fontSize: 14, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>儲存</button>
+              {ngrokUrl && (
+                <p style={{ marginTop: 12, fontSize: 13, color: '#059669' }}>
+                  ✓ 目前連線：{ngrokUrl}
+                </p>
+              )}
+              <hr style={{ margin: '24px 0', borderColor: '#f1f5f9' }} />
+              <p style={{ fontSize: 12, color: '#94a3b8' }}>
+                版本 v1.0 · 王志文律師事務所專用 · 裁判 DB 1,322 萬筆 · 207 GB
+              </p>
+            </Card>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(SentencingPredictor));
+  </script>
+</body>
+</html>
