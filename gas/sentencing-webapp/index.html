@@ -388,6 +388,11 @@
               "特殊情狀": { options: {
                 "§47 累犯": { avg: "7年7.2月", n: 1992, delta: +0.3, tag: "累犯" },
               }},
+              "加減刑事由": { options: {
+                "§17Ⅱ 供出上游（必減½）": { avg: "3年9月", delta: -46, tag: "§17Ⅱ", note: "毒危§17Ⅱ必減其刑至二分之一，delta為法定½估算值" },
+                "未遂（§25，得減½）": { avg: "5年5月", delta: -26, tag: "未遂", note: "刑法§25得減至二分之一，delta為估算值" },
+                "§59 情堪憫恕": { avg: "4年6月", delta: -37, tag: "§59", note: "裁量減輕，重罪少見但有實例；通常需搭配§17Ⅱ，delta為估算值" },
+              }},
             },
           },
           "§4Ⅱ 販賣二級(109後)": {
@@ -400,6 +405,11 @@
               }},
               "特殊情狀": { options: {
                 "§47 累犯": { avg: "10年2月", n: 1, delta: -7.7, tag: "累犯", note: "n=1極小樣本，不具統計意義" },
+              }},
+              "加減刑事由": { options: {
+                "§17Ⅱ 供出上游（必減½）": { avg: "5年5月", delta: -65, tag: "§17Ⅱ", note: "毒危§17Ⅱ必減其刑至二分之一，delta為法定½估算值" },
+                "未遂（§25，得減½）": { avg: "8年", delta: -34, tag: "未遂", note: "刑法§25得減至二分之一，delta為估算值" },
+                "§59 情堪憫恕": { avg: "5年10月", delta: -60, tag: "§59", note: "裁量減輕，重罪少見但有實例；通常需搭配§17Ⅱ，delta為估算值" },
               }},
             },
           },
@@ -414,6 +424,11 @@
               "行為態樣": { options: {
                 "販賣": { avg: "7年5.2月", n: 96, delta: -1.8, tag: "販賣" },
                 "運輸": { avg: "8年9.3月", n: 12, delta: +14.3, tag: "運輸" },
+              }},
+              "加減刑事由": { options: {
+                "§17Ⅱ 供出上游（必減½）": { avg: "3年9月", delta: -46, tag: "§17Ⅱ", note: "毒危§17Ⅱ必減其刑至二分之一，delta為法定½估算值" },
+                "未遂（§25，得減½）": { avg: "5年5月", delta: -26, tag: "未遂", note: "刑法§25得減至二分之一，delta為估算值" },
+                "§59 情堪憫恕": { avg: "4年6月", delta: -37, tag: "§59", note: "裁量減輕，重罪少見但有實例；通常需搭配§17Ⅱ，delta為估算值" },
               }},
             },
           },
@@ -988,17 +1003,40 @@
         let probQualifiers = [];
         const has = tag => tags.includes(tag);
         const minBase = parseToMonths(lawData.baseline.min);
-        if (minBase >= 36) {
-          probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，不符緩刑門檻（§74需2年以下）`, type: "bad" });
-        } else if (minBase >= 24) {
-          probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，緩刑空間極窄`, type: "warn" });
+
+        // 計算考量減刑因素後的有效最低刑（供緩刑門檻判斷用）
+        let effectiveMin = minBase;
+        const reductionParts = [];
+        if (has("§17Ⅱ")) { effectiveMin = Math.round(effectiveMin * 0.5); reductionParts.push("§17Ⅱ供出上游必減½"); }
+        if (has("未遂")) { effectiveMin = Math.round(effectiveMin * 0.5); reductionParts.push("未遂§25得減½"); }
+        if (has("§59") && minBase >= 36) { effectiveMin = Math.round(effectiveMin * 0.5); reductionParts.push("§59情堪憫恕"); }
+        const hasReductions = reductionParts.length > 0;
+
+        // §74 緩刑門檻（宣告刑2年以下）
+        if (effectiveMin >= 36) {
+          if (hasReductions) {
+            probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，考量${reductionParts.join("+")}後約${formatMonths(effectiveMin)}，仍超緩刑門檻（§74需2年以下）`, type: "bad" });
+          } else {
+            probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，不符緩刑門檻（§74需2年以下）`, type: "bad" });
+          }
+        } else if (effectiveMin >= 24) {
+          if (hasReductions && minBase >= 36) {
+            probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，考量${reductionParts.join("+")}後降至${formatMonths(effectiveMin)}，緩刑邊緣（§74宣告刑須2年以下，差${effectiveMin - 24}月）`, type: "warn" });
+          } else {
+            probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，緩刑空間極窄`, type: "warn" });
+          }
+        } else if (minBase >= 36) {
+          // 法定刑高，但透過減刑因素已進入緩刑門檻
+          probQualifiers.push({ text: `法定最低刑${formatMonths(minBase)}，透過${reductionParts.join("+")}有效最低刑降至${formatMonths(effectiveMin)}，已符緩刑門檻（§74）`, type: "good" });
         }
+
         if (has("累犯")) probQualifiers.push({ text: "累犯：緩刑受嚴格限制（§74Ⅰ②），僅「宣判時」距前案執行完畢逾5年者仍有機會", type: "warn" });
         if (has("坦承") && has("已和解")) probQualifiers.push({ text: "坦承+和解：緩刑最佳組合", type: "good" });
         else if (has("坦承") && has("賠償")) probQualifiers.push({ text: "坦承+賠償：竊盜案中有利緩刑", type: "good" });
         if (has("否認")) probQualifiers.push({ text: "否認犯罪：大幅降低緩刑機會", type: "bad" });
         if (has("未和解") || has("未賠償")) probQualifiers.push({ text: "未和解/未賠償：緩刑機會大幅降低", type: "warn" });
-        if (has("§59")) probQualifiers.push({ text: "§59 情堪憫恕：可大幅降低刑度，進入緩刑門檻", type: "good" });
+        // §59 顯示：若已在上方高刑度減算中顯示過，不重複；否則顯示一般說明
+        if (has("§59") && !(minBase >= 36 && effectiveMin < 24)) probQualifiers.push({ text: "§59 情堪憫恕：可大幅降低刑度，進入緩刑門檻", type: "good" });
 
         if (lk === "§339" && tags.length === 0) {
           probQualifiers.push({ text: "整體緩刑率 16.6%（1,748/10,513）", type: "info" });
