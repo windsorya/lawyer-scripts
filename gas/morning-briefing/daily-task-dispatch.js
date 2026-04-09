@@ -29,27 +29,6 @@ function sendDailyTaskDispatch() {
   // 週六日不推播
   if (dayOfWeek === 0 || dayOfWeek === 6) return;
 
-  // 陳律特休偵測：掃描今日律師行事曆全日事件
-  try {
-    var lawyerCal = CalendarApp.getCalendarById(CONFIG.LAWYER_CALENDAR_ID);
-    if (lawyerCal) {
-      var leaveStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-      var leaveEnd   = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-      var todayEvents = lawyerCal.getEvents(leaveStart, leaveEnd);
-      var chenOnLeave = todayEvents.some(function(ev) {
-        var t = ev.getTitle();
-        return t.includes('陳律') && isLeaveEvent(t);
-      });
-      if (chenOnLeave) {
-        sendLineMessage('俊銘早，今天特休，好好休息！有急事再聯繫 😊');
-        Logger.log('陳律今日特休，跳過工作分配推播');
-        return;
-      }
-    }
-  } catch (leaveErr) {
-    Logger.log('陳律特休偵測失敗（略過）：' + leaveErr.message);
-  }
-
   var weekDays = ['日', '一', '二', '三', '四', '五', '六'];
   var month = today.getMonth() + 1;
   var date = today.getDate();
