@@ -49,6 +49,20 @@ function sendDailyTaskDispatch() {
   var nextBizLabel = (dayOfWeek === 5) ? '下週一' : '明天';
   var nextBizDateStr = (nextBizDay.getMonth() + 1) + '/' + nextBizDay.getDate();
 
+  // 陳律特休偵測
+  var chenOnLeave = false;
+  try {
+    var lawyerCal = CalendarApp.getCalendarById(CONFIG.LAWYER_CALENDAR_ID);
+    if (lawyerCal) {
+      chenOnLeave = lawyerCal.getEvents(todayStart, todayEnd).some(function(ev) {
+        var t = ev.getTitle();
+        return t.includes('陳律') && isLeaveEvent(t);
+      });
+    }
+  } catch (leaveErr) {
+    Logger.log('陳律特休偵測失敗（略過）：' + leaveErr.message);
+  }
+
   // ===== 掃描三個行事曆 =====
   var todayCourtEvents = getDispatchCourtEvents_(todayStart, todayEnd);
   var tomorrowCourtEvents = getDispatchCourtEvents_(nextBizStart, nextBizEnd);
@@ -120,7 +134,9 @@ function sendDailyTaskDispatch() {
   });
 
   // ===== 組合訊息 =====
-  var msg = '俊銘早，\n今天（' + month + '/' + date + ' 週' + dayStr + '）工作事項：';
+  var msg = chenOnLeave
+    ? '⚠️ 俊銘今日特休，以下事項由您接手處理：\n\n今天（' + month + '/' + date + ' 週' + dayStr + '）：'
+    : '俊銘早，\n今天（' + month + '/' + date + ' 週' + dayStr + '）工作事項：';
   var hasContent = false;
 
   // 庭期
