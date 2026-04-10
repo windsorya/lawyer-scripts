@@ -654,10 +654,13 @@ function generateCourtPrep_(caseType, caseInfo, notionContent) {
   var prompt = buildCourtPrepPrompt_(caseType, caseInfo, notionContent);
   var payload = {
     model: 'claude-sonnet-4-6',
-    max_tokens: 8000,
+    max_tokens: 4096,
     system: '你是一位台灣律師的法律助理，專精台灣法院實務與訴訟程序。請以繁體中文、簡潔可直接使用的格式生成開庭準備文件。避免廢話，著重實際可操作的準備事項。',
     messages: [{ role: 'user', content: prompt }]
   };
+
+  // 可重試的 HTTP 狀態碼（暫時性錯誤）
+  var RETRYABLE_CODES = { 429: true, 500: true, 529: true };
 
   for (var attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -670,21 +673,69 @@ function generateCourtPrep_(caseType, caseInfo, notionContent) {
         },
         payload: JSON.stringify(payload),
         muteHttpExceptions: true,
-        deadline: 55
+        deadline: 60
       });
       var code = response.getResponseCode();
-      var data = JSON.parse(response.getContentText());
-      if (code === 200 && data.content && data.content.length > 0) {
-        return data.content[0].text;
+      var body = response.getContentText();
+      if (code === 200) {
+        var data = JSON.parse(body);
+        if (data.content && data.content.length > 0) {
+          return data.content[0].text;
+        }
+        Logger.log('[claude] 200 但 content 空：' + body.substring(0, 500));
+        return null;
       }
-      Logger.log('[claude] 錯誤 ' + code + '：' + response.getContentText().substring(0, 300));
-      if (attempt < 2) Utilities.sleep(4000);
+      Logger.log('[claude] 錯誤 ' + code + '：' + body.substring(0, 500));
+      // 不可重試的錯誤（認證/請求格式問題），直接返回
+      if (!RETRYABLE_CODES[code]) return null;
+      if (attempt < 2) Utilities.sleep(8000);
     } catch (e) {
-      Logger.log('[claude] 例外 attempt ' + attempt + '：' + e);
-      if (attempt < 2) Utilities.sleep(4000);
+      Logger.log('[claude] 例外 attempt ' + attempt + '：' + e.message);
+      if (attempt < 2) Utilities.sleep(8000);
     }
   }
   return null;
+}
+
+/**
+ * 最小化 Claude API 測試（clasp run 用）
+ * 驗證 API Key 和連線是否正常
+ */
+function testClaudeApiMinimal_() {
+  var ANTHROPIC_API_KEY = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!ANTHROPIC_API_KEY) {
+    Logger.log('[test] 未設定 ANTHROPIC_API_KEY');
+    return;
+  }
+  Logger.log('[test] API Key 長度：' + ANTHROPIC_API_KEY.length + '，前5碼：' + ANTHROPIC_API_KEY.substring(0, 5));
+  var payload = {
+    model: 'claude-sonnet-4-6',
+    max_tokens: 50,
+    messages: [{ role: 'user', content: 'say hi in Chinese' }]
+  };
+  try {
+    var response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+      deadline: 30
+    });
+    var code = response.getResponseCode();
+    var body = response.getContentText();
+    Logger.log('[test] HTTP ' + code);
+    Logger.log('[test] body: ' + body.substring(0, 500));
+    if (code === 200) {
+      var data = JSON.parse(body);
+      Logger.log('[test] 回覆：' + data.content[0].text);
+    }
+  } catch (e) {
+    Logger.log('[test] 例外：' + e.message);
+  }
 }
 
 /**
@@ -707,7 +758,7 @@ function buildCourtPrepPrompt_(caseType, caseInfo, notionContent) {
 
   // ── Notion 案件現況 ──
   var notionSection = notionContent && notionContent.trim()
-    ? '## Notion 案件現況（請依此內容分析各模組）\n' + notionContent.substring(0, 3500) + '\n\n'
+    ? '## Notion 案件現況（請依此內容分析各模組）\n' + notionContent.substring(0, 2000) + '\n\n'
     : '（Notion 案件頁無可讀內容，請依案號與案件類型提供通用準備要點）\n\n';
 
   // ── 六大通用模組 A-F（依案件類型調整重點） ──
@@ -964,5 +1015,72 @@ function sendAutoCourtPrepLine_(userId, messages) {
     }
   } catch (e) {
     Logger.log('[LINE] 推播例外：' + e);
+  }
+}
+
+/**
+ * 設定 Script Property（clasp run setScriptProp --params '["KEY","VALUE"]' 用）
+ */
+function setScriptProp(key, value) {
+  PropertiesService.getScriptProperties().setProperty(key, value);
+  return 'SET ' + key + ' (length=' + value.length + ')';
+}
+
+/**
+ * 完整流程測試：模擬刑審案件，呼叫 generateCourtPrep_，回傳結果長度
+ */
+function testGenerateCourtPrep() {
+  var start = Date.now();
+  var caseInfo = {
+    caseName: '測試案件',
+    caseNumber: '115審金訴818',
+    caseType: '刑審',
+    judge: '測試法官',
+    division: '測試股',
+    hearingType: '準備程序',
+    date: '2026-04-11',
+    time: '09:30',
+    location: '台灣台中地方法院'
+  };
+  var result = generateCourtPrep_('刑審', caseInfo, '案件進度：第一次準備程序，被告否認犯行，辯護人尚未閱卷完畢。');
+  var elapsed = ((Date.now() - start) / 1000).toFixed(1);
+  if (!result) return 'FAIL: generateCourtPrep_ 回傳 null（' + elapsed + 's）';
+  return 'OK: ' + result.length + ' chars，耗時 ' + elapsed + 's，開頭：' + result.substring(0, 80);
+}
+
+/**
+ * 公開包裝：clasp run testClaudeApi 測試 API 連線
+ * 回傳字串供 clasp run 顯示
+ */
+function testClaudeApi() {
+  var ANTHROPIC_API_KEY = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!ANTHROPIC_API_KEY) return 'FAIL: 未設定 ANTHROPIC_API_KEY';
+  var keyInfo = 'Key 長度=' + ANTHROPIC_API_KEY.length + ' 前5碼=' + ANTHROPIC_API_KEY.substring(0, 5);
+  var payload = {
+    model: 'claude-sonnet-4-6',
+    max_tokens: 50,
+    messages: [{ role: 'user', content: '用一句中文打招呼' }]
+  };
+  try {
+    var response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+      deadline: 30
+    });
+    var code = response.getResponseCode();
+    var body = response.getContentText();
+    if (code === 200) {
+      var data = JSON.parse(body);
+      return 'OK [' + keyInfo + '] 回覆：' + data.content[0].text;
+    }
+    return 'FAIL HTTP ' + code + ' [' + keyInfo + '] body: ' + body.substring(0, 300);
+  } catch (e) {
+    return 'EXCEPTION [' + keyInfo + '] ' + e.message;
   }
 }
