@@ -1015,6 +1015,13 @@ function sendLinePush_(mo) {
 
 function sendLineMessage(text){sendLinePush_(buildTextMessages_(text));}
 
+function pushCourtPrepManual() {
+  var msg1 = '📋 開庭準備已產出（完整版）\n\n案件：黃雋廷案 115審金訴818\n庭期：04/13(Mon) 09:50\n法院：臺灣臺中地方法院\n類型：刑事審理｜開庭\n\n👉 https://www.notion.so/33ee22f21ca481a39430face3bcb28af\n\n✅ 含完整案情、辯護策略、雷區提示';
+  var msg2 = '📋 開庭準備已產出（完整版）\n\n案件：劉懷仁案 115訴137\n庭期：04/13(Mon) 14:00\n法院：臺灣苗栗地方法院\n類型：刑事審理｜開庭\n\n👉 https://www.notion.so/33ee22f21ca481989252cadc11808ddb\n\n✅ 含DB實證法官傾向、量刑預估、§57人設狀態';
+  sendLinePush_(buildTextMessages_(msg1));
+  sendLinePush_(buildTextMessages_(msg2));
+}
+
 function setScriptProperty(key, value) {
   PropertiesService.getScriptProperties().setProperty(key, value);
   return 'Set ' + key + ' (len=' + value.length + ')';
@@ -1461,4 +1468,105 @@ function getRitualReminders() {
 
   if (lines.length === 0) return '';
   return '\n🎂 家庭儀式提醒\n' + lines.join('\n') + '\n';
+}
+
+// ======================== 法官傾向 API 共用模組 ========================
+// 供 auto-court-prep.js 的 notifyLineCourtPrepDone_ 呼叫
+// 資料來源：aceofbase.ngrok.app（本機 MCP server REST endpoint）
+
+var _JUDICIAL_API = 'https://aceofbase.ngrok.app/api/judge-stats';
+
+/** 從行事曆 description 抓法官名（格式：法官：XXX / 承辦：XXX） */
+function _judgeFromDesc_(desc) {
+  var m = desc.match(/(?:法官|承辦|檢察官)[：:：\s]+([^\s\n,，（(]{2,4})/);
+  return m ? m[1].trim() : '';
+}
+
+/** 從事件標題萃取案件名稱（去掉開庭/案號/括號） */
+function _caseNameFromTitle_(title) {
+  var s = title.replace(/^(開庭|宣判|調解|律見)[：:：\s]?/, '').trim();
+  s = s.replace(/[（(][^）)]*[）)]/g, '').trim();
+  s = s.replace(/\d{2,3}\s*年?度?\s*[^\s\d]{1,4}字第?\d+[號号]?/g, '').trim();
+  return s.length >= 2 ? s : '';
+}
+
+/** 從 Notion 案件追蹤 DB 查 ▸法官 欄位 */
+function _judgeFromNotion_(caseName) {
+  try {
+    var r = UrlFetchApp.fetch(
+      'https://api.notion.com/v1/databases/' + COURT_PREP_CASE_DB_ID + '/query',
+      { method: 'post',
+        headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY,
+                   'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+        payload: JSON.stringify({ filter: { property: '案件名稱', title: { contains: caseName } }, page_size: 1 }),
+        muteHttpExceptions: true });
+    var d = JSON.parse(r.getContentText());
+    if (!d.results || !d.results.length) return '';
+    var jp = d.results[0].properties['▸法官'];
+    if (!jp || !jp.rich_text) return '';
+    return jp.rich_text.map(function(t) { return t.plain_text; }).join('').trim();
+  } catch (e) { return ''; }
+}
+
+/** 地點字串 → 法院代碼（預設 TCD） */
+function _courtCode_(text) {
+  var map = [['臺中地','TCD'],['台中地','TCD'],['高院臺中','TCA'],['臺中高分','TCA'],
+             ['高等行政','TCBA'],['臺北地','TPD'],['台北地','TPD'],['高院','TCA']];
+  for (var i = 0; i < map.length; i++) {
+    if (text.indexOf(map[i][0]) !== -1) return map[i][1];
+  }
+  return 'TCD';
+}
+
+/** 事件文字推斷案件類型（M/V/A） */
+function _caseType_(text) {
+  if (/民字|家字|簡民|消費/.test(text)) return 'V';
+  if (/行政訴訟|行訴字|行政/.test(text)) return 'A';
+  return 'M';
+}
+
+/** 呼叫 aceofbase REST API，回傳格式化字串 */
+function _fetchInsightLine_(judge, court, caseType) {
+  try {
+    var url = _JUDICIAL_API
+      + '?judge=' + encodeURIComponent(judge)
+      + '&court=' + encodeURIComponent(court)
+      + '&case_type=' + encodeURIComponent(caseType);
+    var r = UrlFetchApp.fetch(url, {
+      muteHttpExceptions: true,
+      headers: { 'ngrok-skip-browser-warning': '1' }
+    });
+    if (r.getResponseCode() !== 200) return '';
+    return _formatInsight_(JSON.parse(r.getContentText()), caseType);
+  } catch (e) { return ''; }
+}
+
+/** JSON stats → 一行摘要文字 */
+function _formatInsight_(d, caseType) {
+  if (!d || d.error || !d.total_cases) return '';
+  var n = d.total_cases, range = d.date_range || '';
+  var parts = [];
+
+  if (caseType === 'M' && d.criminal_stats) {
+    var cs = d.criminal_stats;
+    parts.push('刑事' + n + '件');
+    if (range) parts.push(range + '年');
+    parts.push('緩刑' + Math.round((cs.probation_rate || 0) * 100) + '%');
+    if (cs.avg_sentence_months > 0) parts.push('均刑' + cs.avg_sentence_months + '月');
+  } else if (caseType === 'V' && d.civil_stats) {
+    var vs = d.civil_stats;
+    parts.push('民事' + n + '件');
+    if (range) parts.push(range + '年');
+    parts.push('原告勝率' + Math.round((vs.plaintiff_win_rate || 0) * 100) + '%');
+  } else if (caseType === 'A' && d.admin_stats) {
+    var as_ = d.admin_stats;
+    parts.push('行政' + n + '件');
+    if (range) parts.push(range + '年');
+    parts.push('撤銷率' + Math.round((as_.revocation_rate || 0) * 100) + '%');
+  } else {
+    parts.push(n + '件');
+    if (range) parts.push(range + '年');
+  }
+
+  return parts.join('，');
 }

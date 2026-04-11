@@ -947,6 +947,16 @@ function notifyLineCourtPrepDone_(caseInfo, notionPageUrl, isChen) {
   msg += '類型：' + (typeLabel[caseInfo.caseType] || caseInfo.caseType)
        + '｜' + caseInfo.hearingType + '\n';
 
+  // 法官傾向摘要（從本機 DB 查詢，失敗時靜默略過）
+  if (caseInfo.judge) {
+    var apiCaseType = { '刑偵': 'M', '刑審': 'M', '民事': 'V', '行政': 'A' }[caseInfo.caseType] || 'M';
+    var court = _courtCode_(caseInfo.location || '');
+    var statsLine = _fetchInsightLine_(caseInfo.judge, court, apiCaseType);
+    if (statsLine) {
+      msg += '📊 ' + caseInfo.judge + '｜' + statsLine + '\n';
+    }
+  }
+
   if (notionPageUrl) {
     msg += '\n👉 ' + notionPageUrl + '\n';
   } else {
