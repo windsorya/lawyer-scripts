@@ -184,32 +184,43 @@ function writeBillingReport(data, sheetName, searchQuery) {
     sheet = ss.insertSheet(tabName);
   }
 
+  // 取得即時匯率
+  var usdRate = getUsdToTwdRate();
+
   // 寫入表頭
-  var headers = ["日期", "主旨", "金額", "幣別", "備註（原始行）"];
+  var headers = ["日期", "主旨", "金額", "幣別", "TWD 金額", "備註（原始行）"];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
 
   if (data.length === 0) {
     sheet.getRange(2, 1).setValue("（無資料）");
-    return ss.getUrl();
+    return { url: ss.getUrl(), twdGrandTotal: 0, rate: usdRate };
   }
 
   // 分幣別統計
   var usdTotal = 0;
   var twdTotal = 0;
+  var twdGrandTotal = 0;
   var rows = [];
 
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
+    var twdAmount = null;
+    if (row.currency === "USD" && row.amount !== null) {
+      twdAmount = Math.round(row.amount * usdRate);
+    } else if (row.currency === "TWD" && row.amount !== null) {
+      twdAmount = row.amount;
+    }
     rows.push([
       row.date,
       row.subject,
       row.amount !== null ? row.amount : "(無法提取)",
       row.currency || "-",
+      twdAmount !== null ? twdAmount : "(無法換算)",
       row.rawLine || ""
     ]);
-    if (row.currency === "USD" && row.amount) usdTotal += row.amount;
-    if (row.currency === "TWD" && row.amount) twdTotal += row.amount;
+    if (row.currency === "USD" && row.amount) { usdTotal += row.amount; twdGrandTotal += twdAmount; }
+    if (row.currency === "TWD" && row.amount) { twdTotal += row.amount; twdGrandTotal += row.amount; }
   }
 
   sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
@@ -223,10 +234,14 @@ function writeBillingReport(data, sheetName, searchQuery) {
     sheet.getRange(totalRow, 2).setValue("USD 總計：$" + usdTotal.toFixed(2));
   }
   if (twdTotal > 0) {
-    sheet.getRange(totalRow + 1, 2).setValue("TWD 總計：NT$" + twdTotal.toFixed(0));
+    sheet.getRange(totalRow + 1, 2).setValue("TWD 原幣：NT$" + twdTotal.toFixed(0));
   }
   if (usdTotal === 0 && twdTotal === 0) {
     sheet.getRange(totalRow, 2).setValue("（無有效金額）");
+  }
+  if (twdGrandTotal > 0) {
+    sheet.getRange(totalRow, 5).setValue("NT$" + Math.round(twdGrandTotal) + "（@" + usdRate.toFixed(2) + "）");
+    sheet.getRange(totalRow, 5).setFontWeight("bold");
   }
 
   // 加總列背景色
@@ -237,7 +252,8 @@ function writeBillingReport(data, sheetName, searchQuery) {
 
   var url = ss.getUrl();
   Logger.log("Sheet URL: " + url);
-  return url;
+  Logger.log("TWD 總計（含換算 @" + usdRate.toFixed(2) + "）：NT$" + Math.round(twdGrandTotal));
+  return { url: url, twdGrandTotal: Math.round(twdGrandTotal), rate: usdRate };
 }
 
 // ===== 函式 4：主入口（預設 Anthropic，最近 90 天） =====
@@ -269,14 +285,16 @@ function runBillingStats() {
     }
   }
 
-  var sheetUrl = writeBillingReport(data, "帳單統計", "Anthropic " + dateFrom + "~");
+  var reportResult = writeBillingReport(data, "帳單統計", "Anthropic " + dateFrom + "~");
 
   var summary = {
     found: messages.length,
     extracted: messages.length - failCount,
     failed: failCount,
     usdTotal: usdTotal.toFixed(2),
-    sheetUrl: sheetUrl
+    twdTotal: reportResult.twdGrandTotal,
+    rate: reportResult.rate,
+    sheetUrl: reportResult.url
   };
 
   Logger.log("===== 結果摘要 =====");
@@ -318,16 +336,37 @@ function runCustomBillingStats(sender, dateFrom, dateTo) {
   }
 
   var tabName = sender + " " + dateFrom + "~" + (dateTo || "今");
-  var sheetUrl = writeBillingReport(data, "帳單統計", tabName);
+  var reportResult = writeBillingReport(data, "帳單統計", tabName);
 
   Logger.log("===== 結果摘要 =====");
   Logger.log("找到郵件: " + messages.length + " 封");
   Logger.log("成功提取: " + (messages.length - failCount) + " 筆");
   Logger.log("提取失敗: " + failCount + " 筆");
   if (usdTotal > 0) Logger.log("USD 總計: $" + usdTotal.toFixed(2));
-  if (twdTotal > 0) Logger.log("TWD 總計: NT$" + twdTotal.toFixed(0));
-  Logger.log("Sheet URL: " + sheetUrl);
+  if (twdTotal > 0) Logger.log("TWD 原幣: NT$" + twdTotal.toFixed(0));
+  if (reportResult.twdGrandTotal > 0) Logger.log("TWD 總計（含換算 @" + reportResult.rate.toFixed(2) + "）: NT$" + reportResult.twdGrandTotal);
+  Logger.log("Sheet URL: " + reportResult.url);
   Logger.log("===== 完成 =====");
+}
+
+// ===== 輔助：取得即時 USD→TWD 匯率 =====
+function getUsdToTwdRate() {
+  var FALLBACK_RATE = 31.77;
+  try {
+    var response = UrlFetchApp.fetch("https://api.exchangerate-api.com/v4/latest/USD", { muteHttpExceptions: true });
+    if (response.getResponseCode() === 200) {
+      var json = JSON.parse(response.getContentText());
+      var rate = json.rates && json.rates.TWD;
+      if (rate && rate > 0) {
+        Logger.log("即時匯率 USD→TWD: " + rate);
+        return rate;
+      }
+    }
+  } catch (e) {
+    Logger.log("匯率 API 失敗：" + e.message + "，使用 fallback " + FALLBACK_RATE);
+  }
+  Logger.log("使用 fallback 匯率 USD→TWD: " + FALLBACK_RATE);
+  return FALLBACK_RATE;
 }
 
 // ===== 輔助：取得 N 天前的日期（格式 YYYY/MM/DD） =====
