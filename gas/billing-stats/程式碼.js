@@ -4,7 +4,7 @@
 
 // ===== 寄件者對照表 =====
 var SENDER_MAP = {
-  "anthropic": "from:receipts@anthropic.com",
+  "anthropic": "from:invoice+statements@mail.anthropic.com",
   "apple":     "from:noreply@email.apple.com subject:receipt",
   "openai":    "from:noreply@tm.openai.com",
   "cursor":    "from:billing@cursor.sh",
@@ -242,7 +242,7 @@ function writeBillingReport(data, sheetName, searchQuery) {
 
 // ===== 函式 4：主入口（預設 Anthropic，最近 90 天） =====
 function runBillingStats() {
-  var senderQuery = "from:receipts@anthropic.com";
+  var senderQuery = "from:invoice+statements@mail.anthropic.com";
   var dateFrom = getDateNDaysAgo(90);
 
   Logger.log("===== billing-stats 開始 =====");
@@ -271,13 +271,19 @@ function runBillingStats() {
 
   var sheetUrl = writeBillingReport(data, "帳單統計", "Anthropic " + dateFrom + "~");
 
+  var summary = {
+    found: messages.length,
+    extracted: messages.length - failCount,
+    failed: failCount,
+    usdTotal: usdTotal.toFixed(2),
+    sheetUrl: sheetUrl
+  };
+
   Logger.log("===== 結果摘要 =====");
-  Logger.log("找到郵件: " + messages.length + " 封");
-  Logger.log("成功提取: " + (messages.length - failCount) + " 筆");
-  Logger.log("提取失敗: " + failCount + " 筆");
-  Logger.log("USD 總計: $" + usdTotal.toFixed(2));
-  Logger.log("Sheet URL: " + sheetUrl);
+  Logger.log(JSON.stringify(summary));
   Logger.log("===== 完成 =====");
+
+  return summary;
 }
 
 // ===== 函式 5：自定義搜尋入口 =====
