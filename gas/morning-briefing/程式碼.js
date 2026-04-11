@@ -1471,10 +1471,86 @@ function getRitualReminders() {
 }
 
 // ======================== 法官傾向 API 共用模組 ========================
-// 供 auto-court-prep.js 的 notifyLineCourtPrepDone_ 呼叫
+// 供 auto-court-prep.js 呼叫：LINE 通知摘要 + Claude prompt 注入
 // 資料來源：aceofbase.ngrok.app（本機 MCP server REST endpoint）
 
 var _JUDICIAL_API = 'https://aceofbase.ngrok.app/api/judge-stats';
+
+/** API 呼叫 → 回傳原始 JSON（供 prompt 注入用），失敗回傳 null */
+function _fetchJudgeStatsJson_(judge, court, caseType) {
+  try {
+    var url = _JUDICIAL_API
+      + '?judge='     + encodeURIComponent(judge)
+      + '&court='     + encodeURIComponent(court)
+      + '&case_type=' + encodeURIComponent(caseType);
+    var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'ngrok-skip-browser-warning': '1' } });
+    if (r.getResponseCode() !== 200) return null;
+    return JSON.parse(r.getContentText());
+  } catch (e) { return null; }
+}
+
+/**
+ * 法官傾向統計 JSON → Claude prompt 專用格式化區塊
+ * @param {Object} d  - _fetchJudgeStatsJson_ 回傳值
+ * @param {string} judge
+ * @param {string} caseType - 'M'/'V'/'A'
+ */
+function _buildJudgeStatsBlock_(d, judge, caseType) {
+  if (!d || d.error || !d.total_cases) {
+    return '## 法官傾向（本地 DB）\n查無資料（新任法官或資料覆蓋不足）\n\n';
+  }
+  var n = d.total_cases, range = d.date_range || '', courtLabel = d.court || '';
+  var block = '## 法官傾向（本地 DB 實際統計，請據此校準分析）\n';
+  block += '承審法官：' + judge + '｜' + courtLabel + '\n';
+  block += '統計範圍：近 ' + n + ' 件（' + range + ' 年）\n\n';
+
+  if (caseType === 'M' && d.criminal_stats) {
+    var cs = d.criminal_stats;
+    var pct = Math.round(cs.probation_rate * 100);
+    var avg = cs.avg_sentence_months;
+    var sd  = cs.sentence_distribution || {};
+    var lvl = pct < 15 ? '偏低' : pct < 30 ? '中等' : '偏高';
+    block += '【刑事統計】\n';
+    block += '- 緩刑率：' + pct + '%（' + lvl + '）\n';
+    block += '- 平均刑期：' + avg + ' 個月\n';
+    block += '- 刑度分布：6月以下 ' + (sd['6月以下']||0) + '件｜'
+           + '6月-1年 '  + (sd['6月-1年'] ||0) + '件｜'
+           + '1-2年 '    + (sd['1-2年']   ||0) + '件｜'
+           + '2年以上 '  + (sd['2年以上'] ||0) + '件\n';
+    block += '\n⚠️ 量刑策略提示（請在量刑分析模組中具體評估）：\n';
+    if (pct < 15) {
+      block += '緩刑比例偏低（' + pct + '%），以緩刑為目標的勝算不高。\n';
+      block += '建議：策略重心移到「6 個月以下，得易科罰金」，聚焦刑度而非緩刑資格。\n';
+      block += '請評估本案有利因子（初犯/和解/認罪/賠償）能否將刑度壓至 6 月以下（均刑基準：' + avg + ' 月）。\n';
+    } else if (pct >= 30) {
+      block += '緩刑比例偏高（' + pct + '%），值得積極爭取。\n';
+      block += '建議：完整準備緩刑聲請，強調犯後態度、賠償和解、社會連結。\n';
+    } else {
+      block += '緩刑比例中等（' + pct + '%），視有利因子決定是否主打緩刑。\n';
+    }
+  } else if (caseType === 'V' && d.civil_stats) {
+    var vs = d.civil_stats;
+    var wr = Math.round(vs.plaintiff_win_rate * 100);
+    var ar = vs.avg_award_rate ? Math.round(vs.avg_award_rate * 100) : null;
+    block += '【民事統計】\n';
+    block += '- 原告勝率：' + wr + '%\n';
+    if (ar !== null) block += '- 平均判賠比例：' + ar + '%（判賠/請求）\n';
+    block += '\n⚠️ 訴訟策略提示：\n';
+    if (wr >= 55) block += '原告勝率偏高（' + wr + '%），訴訟積極進行對原告有利。\n';
+    else if (wr <= 40) block += '原告勝率偏低（' + wr + '%），請確認訴訟標的與舉證是否充分。\n';
+    if (ar !== null && ar < 60) block += '判賠比例偏低（' + ar + '%），聲請金額建議保留合理空間。\n';
+  } else if (caseType === 'A' && d.admin_stats) {
+    var as_ = d.admin_stats;
+    var rr = Math.round(as_.revocation_rate * 100);
+    block += '【行政統計】\n';
+    block += '- 撤銷率：' + rr + '%\n';
+    block += '\n⚠️ 訴訟策略提示：\n';
+    if (rr >= 30) block += '撤銷率偏高（' + rr + '%），積極攻擊處分違法點有較大勝算。\n';
+    else block += '撤銷率偏低（' + rr + '%），需更精準聚焦最強的違法論點。\n';
+  }
+  block += '\n';
+  return block;
+}
 
 /** 從行事曆 description 抓法官名（格式：法官：XXX / 承辦：XXX） */
 function _judgeFromDesc_(desc) {

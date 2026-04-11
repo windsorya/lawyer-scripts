@@ -327,8 +327,20 @@ function processCourtPrepEvent_(event, hearingDate) {
     location: location
   };
 
-  // 3. 呼叫 Claude 生成準備
-  var prepContent = generateCourtPrep_(caseType, caseInfo, notionContent);
+  // 3a. 法官統計數據（注入 Claude prompt，失敗時靜默略過）
+  var judgeStatsJson = null;
+  if (caseInfo.judge) {
+    var apiCaseTypeForStats = { '刑偵': 'M', '刑審': 'M', '民事': 'V', '行政': 'A' }[caseType] || 'M';
+    judgeStatsJson = _fetchJudgeStatsJson_(caseInfo.judge, _courtCode_(caseInfo.location || ''), apiCaseTypeForStats);
+    if (judgeStatsJson) {
+      Logger.log('[process] 已取得法官統計：' + caseInfo.judge + ' total=' + (judgeStatsJson.total_cases || 0));
+    } else {
+      Logger.log('[process] 法官統計查無資料或失敗，略過');
+    }
+  }
+
+  // 3b. 呼叫 Claude 生成準備
+  var prepContent = generateCourtPrep_(caseType, caseInfo, notionContent, judgeStatsJson);
   if (!prepContent) {
     throw new Error('Claude API 未回傳內容');
   }
@@ -644,14 +656,14 @@ function notionFetch_(url, options, retries) {
 /**
  * 呼叫 Claude API 生成開庭準備文件（重試 2 次）
  */
-function generateCourtPrep_(caseType, caseInfo, notionContent) {
+function generateCourtPrep_(caseType, caseInfo, notionContent, judgeStats) {
   var ANTHROPIC_API_KEY = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
   if (!ANTHROPIC_API_KEY) {
     Logger.log('[claude] 未設定 ANTHROPIC_API_KEY');
     return null;
   }
 
-  var prompt = buildCourtPrepPrompt_(caseType, caseInfo, notionContent);
+  var prompt = buildCourtPrepPrompt_(caseType, caseInfo, notionContent, judgeStats);
   var payload = {
     model: 'claude-sonnet-4-6',
     max_tokens: 4096,
@@ -746,7 +758,7 @@ function testClaudeApiMinimal_() {
  * 依案件類型建構 Claude 開庭準備 Prompt
  * 六大通用模組 A-F（全類型必出）+ 四套模板專屬區塊
  */
-function buildCourtPrepPrompt_(caseType, caseInfo, notionContent) {
+function buildCourtPrepPrompt_(caseType, caseInfo, notionContent, judgeStats) {
   // ── 庭期資訊 ──
   var header = '## 庭期資訊\n'
     + '- 案件：' + (caseInfo.caseName || '（未知）') + '\n'
@@ -761,13 +773,23 @@ function buildCourtPrepPrompt_(caseType, caseInfo, notionContent) {
     ? '## Notion 案件現況（請依此內容分析各模組）\n' + notionContent.substring(0, 2000) + '\n\n'
     : '（Notion 案件頁無可讀內容，請依案號與案件類型提供通用準備要點）\n\n';
 
+  // ── 法官統計數據（從本機判決 DB 實時查詢） ──
+  var judgeStatsSection = '';
+  if (judgeStats) {
+    var apiCaseType = { '刑偵': 'M', '刑審': 'M', '民事': 'V', '行政': 'A' }[caseType] || 'M';
+    var statsBlock = _buildJudgeStatsBlock_(judgeStats, caseInfo.judge || '', apiCaseType);
+    if (statsBlock) {
+      judgeStatsSection = statsBlock + '\n\n';
+    }
+  }
+
   // ── 六大通用模組 A-F（依案件類型調整重點） ──
   var moduleAF = buildModulesAF_(caseType);
 
   // ── 四套模板專屬區塊 ──
   var typeBlock = buildTypeSpecificBlock_(caseType);
 
-  return header + notionSection
+  return header + notionSection + judgeStatsSection
     + '請依下列格式生成開庭準備文件。每個模組都要輸出，資訊不足時標注「（資料不足，請補充）」而非跳過。\n\n'
     + moduleAF + '\n' + typeBlock;
 }
@@ -863,12 +885,12 @@ function buildTypeSpecificBlock_(caseType) {
       + '- 護板：當事人哪些話不能說、哪些細節易被利用\n'
       + '- 記錄：本次偵訊哪些陳述需要明確留紀錄（對日後審判有利）\n\n'
       + '## 【刑事偵查專屬】量刑備案評估\n'
-      + '（本地 DB 法官傾向需另查 judge_stats — 請律師於開庭前補充）\n'
-      + '目前可先評估：若偵查轉向審判，起訴可能罪名、法定刑範圍、有利量刑因子',
+      + '（請依上方【法官統計數據】的量刑分布與緩刑率，評估若移送審判後的量刑風險；若無統計數據則標注「（查無資料）」）\n'
+      + '評估項目：起訴可能罪名、法定刑範圍、有利量刑因子、建議量刑目標區間',
 
     刑審: '---\n\n'
       + '## 【刑事審理專屬】法官傾向\n'
-      + '（本地 DB judge_stats 需另查 — 請律師於開庭前補充，或用 search_to_json.py --mode judge-stats 查詢）\n\n'
+      + '（請依上方【法官統計數據】分析：緩刑率高低對策略的影響、均刑作為量刑錨點、是否值得積極爭取緩刑或改聚焦易科罰金門檻；若無統計數據則標注「（查無資料）」）\n\n'
       + '## 【刑事審理專屬】證據能力分析表\n'
       + '逐一列出本案關鍵證據：\n'
       + '| 證據 | 類型 | 能力爭議 | 處理建議 |\n'
@@ -883,7 +905,7 @@ function buildTypeSpecificBlock_(caseType) {
 
     民事: '---\n\n'
       + '## 【民事專屬】法官傾向\n'
-      + '（本地 DB 需另查 — 請律師補充，或用 search_to_json.py --mode fts --case-type V 查詢）\n\n'
+      + '（請依上方【法官統計數據】分析：原告勝率、判賠比例，對本案攻防策略的具體影響；若無統計數據則標注「（查無資料）」）\n\n'
       + '## 【民事專屬】請求權基礎／訴訟標的\n'
       + '主位請求：（依案件填入）\n'
       + '備位請求：（如有）\n'
@@ -900,7 +922,7 @@ function buildTypeSpecificBlock_(caseType) {
 
     行政: '---\n\n'
       + '## 【行政訴訟專屬】法官傾向\n'
-      + '（本地 DB 需另查 — 請律師補充）\n\n'
+      + '（請依上方【法官統計數據】分析：撤銷率高低、對本案論點取捨的策略影響；若無統計數據則標注「（查無資料）」）\n\n'
       + '## 【行政訴訟專屬】行政處分違法性六層架構\n'
       + '逐層檢查（有問題者標 ⚠️）：\n'
       + '① 主體適法性（有無裁量權限）\n'
