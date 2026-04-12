@@ -148,3 +148,8 @@ function ensureHighlightSyncTriggers_() {
     console.log('✅ Trigger created: syncGcalToNotion every 5 min');
   } else { console.log('ℹ️ syncGcalToNotion trigger already exists'); }
 }
+
+// 公開入口（clasp run 用）
+function setupHighlightSync() {
+  ensureHighlightSyncTriggers_();
+}
