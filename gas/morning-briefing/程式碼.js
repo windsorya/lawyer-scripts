@@ -436,11 +436,11 @@ function buildHolidayHighlightCandidates_(familyEvents) {
 
   // 2. 從 5 個 Notion database 撈未完成真實任務
   var notionSources = [
-    { dbId: 'bbee22f2-1ca4-8204-8c3a-0762b543100f', icon: '📥' },
-    { dbId: '126e22f2-1ca4-82f4-a239-877c4a809bfa',  icon: '👨‍💼' },
-    { dbId: 'e95e22f2-1ca4-828e-aefa-07cb6adc890a',  icon: '👨‍👩‍👧' },
-    { dbId: '9a2e22f2-1ca4-827e-84a0-877316d747e5',  icon: '♻️' },
-    { dbId: '476e22f2-1ca4-82b3-b768-0787728e380f',  icon: '😎' },
+    { dbId: '401e22f2-1ca4-83a1-b4bc-813b5dd854cc', icon: '📥' },  // Inbox
+    { dbId: '6bde22f2-1ca4-83b9-a367-0113a640cb58', icon: '👨‍💼' },  // 個人待辦
+    { dbId: 'dc5e22f2-1ca4-836c-be9d-817f196ae001', icon: '👨‍👩‍👧' },  // 家庭雜務
+    { dbId: 'acde22f2-1ca4-824a-a32b-81378dee4382', icon: '♻️'  },  // 慣例.模版
+    { dbId: '9b2e22f2-1ca4-82c3-8281-01357fbc7f20', icon: '😎'  },  // Someday
   ];
 
   var today = new Date();
@@ -1500,11 +1500,11 @@ function testCourtEventsMonday() {
 /** 問題4 診斷：確認假日 Highlight 5 個 Notion DB 是否可連通及屬性名稱 */
 function testHolidayNotionDBs() {
   var ids = [
-    { dbId: 'bbee22f2-1ca4-8204-8c3a-0762b543100f', icon: '📥', name: 'Inbox' },
-    { dbId: '126e22f2-1ca4-82f4-a239-877c4a809bfa', icon: '👨‍💼', name: '個人待辦' },
-    { dbId: 'e95e22f2-1ca4-828e-aefa-07cb6adc890a', icon: '👨‍👩‍👧', name: '家庭雜務' },
-    { dbId: '9a2e22f2-1ca4-827e-84a0-877316d747e5', icon: '♻️',  name: '慣例模版' },
-    { dbId: '476e22f2-1ca4-82b3-b768-0787728e380f', icon: '😎', name: 'Someday' },
+    { dbId: '401e22f2-1ca4-83a1-b4bc-813b5dd854cc', icon: '📥', name: 'Inbox' },
+    { dbId: '6bde22f2-1ca4-83b9-a367-0113a640cb58', icon: '👨‍💼', name: '個人待辦' },
+    { dbId: 'dc5e22f2-1ca4-836c-be9d-817f196ae001', icon: '👨‍👩‍👧', name: '家庭雜務' },
+    { dbId: 'acde22f2-1ca4-824a-a32b-81378dee4382', icon: '♻️',  name: '慣例模版' },
+    { dbId: '9b2e22f2-1ca4-82c3-8281-01357fbc7f20', icon: '😎', name: 'Someday' },
   ];
   Logger.log('=== 假日 Highlight Notion DB 診斷 ===');
   ids.forEach(function(src) {
