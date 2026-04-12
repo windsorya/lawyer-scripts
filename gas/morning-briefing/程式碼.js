@@ -1,5 +1,5 @@
 // ============================================================
-// 📋 律師晨報推播系統 v2.32
+// 📋 律師晨報推播系統 v2.33
 // 功能：每日 08:00 自動推播今日/明日庭期、辦案期限、諮詢預約、
 //       案件待辦到期、時效預警、家庭行程、身心狀態至 LINE（透過 Messaging API）
 // 作者：Claude for William
@@ -101,11 +101,11 @@ function truncateLabel_(text, maxLen) {
  */
 function ensureMorningBriefingTrigger_() {
   var triggers = ScriptApp.getProjectTriggers();
-  var hasMorningTrigger = triggers.some(function(t) {
+  var morningTriggers = triggers.filter(function(t) {
     return t.getHandlerFunction() === 'sendMorningBriefing' &&
            t.getTriggerSource() === ScriptApp.TriggerSource.CLOCK;
   });
-  if (!hasMorningTrigger) {
+  if (morningTriggers.length === 0) {
     Logger.log('⚠️ 晨報觸發器不存在，自動重建...');
     ScriptApp.newTrigger('sendMorningBriefing')
       .timeBased()
@@ -114,6 +114,12 @@ function ensureMorningBriefingTrigger_() {
       .inTimezone('Asia/Taipei')
       .create();
     Logger.log('✅ 晨報觸發器已重建：每日 08:00 Asia/Taipei');
+  } else if (morningTriggers.length > 1) {
+    // 多餘觸發器 → 刪除到只剩一個，防止重複推播
+    for (var i = 1; i < morningTriggers.length; i++) {
+      ScriptApp.deleteTrigger(morningTriggers[i]);
+      Logger.log('⚠️ 刪除多餘晨報觸發器：' + morningTriggers[i].getUniqueId());
+    }
   }
 }
 
@@ -176,8 +182,7 @@ function sendMorningBriefing() {
   if (notionAlerts.deadlines.length === 0) { message += '目前無時效警示\n'; }
   else { notionAlerts.deadlines.forEach(function(d) { message += '▸ ' + d.emoji + ' ' + d.caseName + '｜剩 ' + d.daysLeft + ' 天（' + d.deadline + '）\n'; }); }
 
-  var gmailAlerts = getGmailAlerts(today);
-  if (gmailAlerts) message += gmailAlerts + '\n';
+  // Gmail 通知已移除（v2.33：GmailApp.getPlainBody() 耗時過長影響晨報速度）
 
   if (hasChenActivity) { message += '\n👤【陳律動態】\n'; chenLeaveEvents.forEach(function(e) { message += '▸ ' + e.title + '\n'; }); chenCourtEvents.forEach(function(e) { message += formatEvent(e); }); }
 
@@ -500,6 +505,17 @@ function buildHolidayHighlightCandidates_(familyEvents) {
   notionTasks.slice(0, slotsLeft).forEach(function(t) {
     add(t.icon, t.title, t.title);
   });
+
+  // Fallback：若 Notion 全部失敗或無待辦，且無家庭行程 → 固定生活選項（v2.31 回退）
+  if (candidates.length === 0) {
+    Logger.log('buildHolidayHighlightCandidates_: 無Notion任務也無家庭行程，使用固定選項');
+    var fallbacks = ['散步放空', '閱讀充電', '整理筆記', '陪伴家人', '看劇休息', '運動鍛鍊', '冥想放鬆', '整理環境'];
+    var startIdx = today.getDate() % fallbacks.length;
+    for (var fi = 0; fi < Math.min(4, fallbacks.length); fi++) {
+      var item = fallbacks[(startIdx + fi) % fallbacks.length];
+      add('🌿', item, item);
+    }
+  }
 
   // 週日固定加入下週預覽
   if (today.getDay() === 0) {
@@ -1451,6 +1467,79 @@ function testNotionTodos() {
   var ts=getNotionTodoCandidates_(new Date());
   Logger.log('Notion 待辦候選（'+ts.length+' 項）：');
   ts.forEach(function(t,i){Logger.log((i+1)+'. '+t.icon+' '+t.title+t.suffix);});
+}
+
+// ======================== 問題診斷工具 ========================
+
+/** 問題3 診斷：確認下週一庭期行事曆原始內容（含被過濾的事件）*/
+function testCourtEventsMonday() {
+  var today = new Date();
+  var monday = getNextBusinessDay(today);
+  var s = new Date(monday); s.setHours(0,0,0,0);
+  var e = new Date(monday); e.setHours(23,59,59,999);
+  var label = Utilities.formatDate(monday, 'Asia/Taipei', 'MM/dd(EEE)');
+
+  var filtered = getCourtEvents(monday, 0);
+  Logger.log('=== 下週一（' + label + '）庭期診斷 ===');
+  Logger.log('過濾後（晨報顯示）：' + filtered.length + ' 筆');
+  filtered.forEach(function(ev) { Logger.log('  ▸ ' + ev.time + ' ' + ev.title); });
+
+  try {
+    var cal = CalendarApp.getCalendarById(CONFIG.COURT_CALENDAR_ID);
+    var all = cal ? cal.getEvents(s, e) : [];
+    Logger.log('行事曆原始（未過濾）：' + all.length + ' 筆');
+    all.forEach(function(ev) {
+      Logger.log('  - [' + ev.getColor() + '] ' + ev.getTitle() +
+        (ev.isAllDayEvent() ? ' [全天]' : '') +
+        (ev.getTitle().includes('陳律') ? ' ←含陳律被過濾' : '') +
+        (ev.getTitle().includes('✅') ? ' ←✅被過濾' : ''));
+    });
+  } catch (err) { Logger.log('行事曆讀取失敗：' + err.message); }
+}
+
+/** 問題4 診斷：確認假日 Highlight 5 個 Notion DB 是否可連通及屬性名稱 */
+function testHolidayNotionDBs() {
+  var ids = [
+    { dbId: 'bbee22f2-1ca4-8204-8c3a-0762b543100f', icon: '📥', name: 'Inbox' },
+    { dbId: '126e22f2-1ca4-82f4-a239-877c4a809bfa', icon: '👨‍💼', name: '個人待辦' },
+    { dbId: 'e95e22f2-1ca4-828e-aefa-07cb6adc890a', icon: '👨‍👩‍👧', name: '家庭雜務' },
+    { dbId: '9a2e22f2-1ca4-827e-84a0-877316d747e5', icon: '♻️',  name: '慣例模版' },
+    { dbId: '476e22f2-1ca4-82b3-b768-0787728e380f', icon: '😎', name: 'Someday' },
+  ];
+  Logger.log('=== 假日 Highlight Notion DB 診斷 ===');
+  ids.forEach(function(src) {
+    try {
+      // Step1: 確認 DB 存在
+      var metaResp = UrlFetchApp.fetch('https://api.notion.com/v1/databases/' + src.dbId, {
+        headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY, 'Notion-Version': '2022-06-28' },
+        muteHttpExceptions: true,
+      });
+      var meta = JSON.parse(metaResp.getContentText());
+      if (metaResp.getResponseCode() !== 200) {
+        Logger.log(src.icon + ' ' + src.name + '：❌ DB 不存在（' + metaResp.getResponseCode() + '）' + (meta.message || ''));
+        return;
+      }
+      var dbTitle = (meta.title && meta.title[0]) ? meta.title[0].plain_text : '(無標題)';
+      var props = Object.keys(meta.properties || {}).join(', ');
+      Logger.log(src.icon + ' ' + src.name + '：✅ 名稱="' + dbTitle + '"  屬性：' + props);
+
+      // Step2: 嘗試 Checkbox filter
+      var queryResp = UrlFetchApp.fetch('https://api.notion.com/v1/databases/' + src.dbId + '/query', {
+        method: 'post',
+        headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+        payload: JSON.stringify({ filter: { property: 'Checkbox', checkbox: { equals: false } }, page_size: 5 }),
+        muteHttpExceptions: true,
+      });
+      var qData = JSON.parse(queryResp.getContentText());
+      if (queryResp.getResponseCode() !== 200) {
+        Logger.log('  → Checkbox filter 失敗：' + (qData.message || queryResp.getResponseCode()) + '（需確認屬性名稱）');
+      } else {
+        Logger.log('  → Checkbox filter 成功，未完成筆數：' + (qData.results || []).length + '（page_size=5）');
+      }
+    } catch (e) {
+      Logger.log(src.icon + ' ' + src.name + '：❌ 例外：' + e.message);
+    }
+  });
 }
 
 function testGmailAlerts(){var r=getGmailAlerts(new Date());Logger.log(r||'（無命中信件）');}
