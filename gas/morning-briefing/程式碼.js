@@ -661,8 +661,16 @@ function retryMorningBriefing() {
     var pf = function(k){ var v = parseFloat((td||{})[k]); return isNaN(v) ? null : v; };
     var hasSleep = pf('睡眠分析 [睡眠時間] (hr)') || pf('睡眠分析 [Total] (hr)');
 
-    if (!hasSleep && retryCount < 3) {
-      // 仍無睡眠，繼續重試
+    // Step 1：先看睡眠數據是否已到（不管重試次數）
+    if (hasSleep) {
+      PropertiesService.getScriptProperties().deleteProperty('BRIEFING_RETRY_COUNT');
+      Logger.log('睡眠數據已同步，發送完整晨報');
+      sendMorningBriefing();
+      return;
+    }
+
+    // Step 2：仍無睡眠 → 再看重試次數
+    if (retryCount < 3) {
       PropertiesService.getScriptProperties().setProperty('BRIEFING_RETRY_COUNT', String(retryCount + 1));
       var retryTime = new Date(new Date().getTime() + 5 * 60 * 1000);
       ScriptApp.newTrigger('retryMorningBriefing')
@@ -673,19 +681,9 @@ function retryMorningBriefing() {
       return;
     }
 
-    // 走到這裡：要嘛睡眠到了，要嘛重試已達上限
-    // ⚠️ 不在這裡刪 BRIEFING_RETRY_COUNT，讓 sendMorningBriefing 自己判斷：
-    //   - hasSleep=true → sleepMissing=false → sendMorningBriefing 走 else 分支，清除計數器，正常發報
-    //   - hasSleep=false, retryCount>=3 → sendMorningBriefing 走「已達上限」分支，清除計數器，發不含睡眠版本
-    // 若在這裡提前刪除，sendMorningBriefing 會讀到 retryCount=0，誤以為第一次，重啟整個重試迴圈
-
-    if (!hasSleep) {
-      Logger.log('睡眠數據重試已達 3 次上限，發送不含睡眠的晨報');
-    } else {
-      Logger.log('睡眠數據已同步，發送完整晨報');
-    }
-
-    // 呼叫原本的 sendMorningBriefing 發送完整晨報
+    // Step 3：重試已達上限且仍無睡眠 → 發不含睡眠的晨報
+    Logger.log('睡眠數據重試已達 3 次上限，發送不含睡眠的晨報');
+    // 保留 retryCount=3，讓 sendMorningBriefing 走「已達上限」分支清除計數器
     sendMorningBriefing();
 
   } catch (err) {
