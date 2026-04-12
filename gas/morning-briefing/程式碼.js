@@ -627,7 +627,10 @@ function retryMorningBriefing() {
     }
 
     // 走到這裡：要嘛睡眠到了，要嘛重試已達上限
-    PropertiesService.getScriptProperties().deleteProperty('BRIEFING_RETRY_COUNT');
+    // ⚠️ 不在這裡刪 BRIEFING_RETRY_COUNT，讓 sendMorningBriefing 自己判斷：
+    //   - hasSleep=true → sleepMissing=false → sendMorningBriefing 走 else 分支，清除計數器，正常發報
+    //   - hasSleep=false, retryCount>=3 → sendMorningBriefing 走「已達上限」分支，清除計數器，發不含睡眠版本
+    // 若在這裡提前刪除，sendMorningBriefing 會讀到 retryCount=0，誤以為第一次，重啟整個重試迴圈
 
     if (!hasSleep) {
       Logger.log('睡眠數據重試已達 3 次上限，發送不含睡眠的晨報');
@@ -640,7 +643,8 @@ function retryMorningBriefing() {
 
   } catch (err) {
     Logger.log('retryMorningBriefing 執行失敗：' + err.message);
-    PropertiesService.getScriptProperties().deleteProperty('BRIEFING_RETRY_COUNT');
+    // 設 99 而非刪除：防止 sendMorningBriefing 讀到 retryCount=0，重啟重試迴圈
+    PropertiesService.getScriptProperties().setProperty('BRIEFING_RETRY_COUNT', '99');
     // 失敗了還是發一版晨報，不要讓律師什麼都收不到
     try { sendMorningBriefing(); } catch(e2) { Logger.log('fallback sendMorningBriefing 也失敗：' + e2.message); }
   }
