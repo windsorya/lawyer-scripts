@@ -707,8 +707,8 @@ function listBlockedUsers(){
 }
 
 // ===== 收發文自動化 =====
-// Drive 資料夾 ID：100.收發文 (1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b)
-var MAIL_FOLDER_ID_='1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b';
+// Drive 資料夾 ID：100.收發文 (1daKfZuCK3VYCcVSxB269_JnZflr7ZBfR)
+var MAIL_FOLDER_ID_='1daKfZuCK3VYCcVSxB269_JnZflr7ZBfR';
 
 function handleFileMessage_(event){
   var CONFIG=getConfig_();
@@ -1006,7 +1006,7 @@ function listAllProps(){
 // 測試：Drive 上傳權限（觸發 Drive OAuth 授權）
 function testDriveUpload(){
   try{
-    var folder=DriveApp.getFolderById('1B2jUNqxT8fsSCF10Z3dSDjDJHu8cEJ0b');
+    var folder=DriveApp.getFolderById('1daKfZuCK3VYCcVSxB269_JnZflr7ZBfR');
     Logger.log('✅ Drive 資料夾 OK：'+folder.getName());
     var testFile=folder.createFile('test_drive_auth_ok.txt','Drive 授權測試成功，可刪除此檔。');
     Logger.log('✅ 測試檔案上傳 OK：'+testFile.getUrl());

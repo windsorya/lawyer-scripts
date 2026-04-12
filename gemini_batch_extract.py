@@ -9,7 +9,7 @@ API_KEY = os.environ.get("GEMINI_API_KEY")
 if not API_KEY:
     raise ValueError("請設定環境變數 GEMINI_API_KEY，例如：export GEMINI_API_KEY=你的新key")
 PDF_PATH = "/tmp/114_偵_010238_DOC_001_1150129155707.pdf"
-OUTPUT_DIR = os.path.expanduser("~/OneDrive/110.律師/2.案件-進行中/刑事/劉懷仁/_output/")
+OUTPUT_DIR = os.path.expanduser("~/Library/CloudStorage/GoogleDrive-wjv@lawyerwjv.com/共用雲端硬碟/王律共用雲端/110.律師/2.案件-進行中/刑事/劉懷仁/_output/")
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "114_偵_010238_筆錄摘取_gemini.md")
 MAX_BATCH_MB = 44  # 安全閾值
 MODEL = "gemini-2.5-pro"

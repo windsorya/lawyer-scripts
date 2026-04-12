@@ -67,7 +67,7 @@ function queryConsultationFollowups_(todayStr) {
     );
 
     var data = JSON.parse(response.getContentText());
-    if (data.status && data.status !== 200) {
+    if (!data.results || (data.status && data.status !== 200)) {
       Logger.log('Notion 諮詢追蹤查詢錯誤：' + response.getContentText());
       return results;
     }
