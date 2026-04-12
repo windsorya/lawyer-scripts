@@ -121,7 +121,7 @@ function sendMorningBriefing() {
   try { ensureMorningBriefingTrigger_(); } catch(e) { Logger.log('Morning trigger check failed: ' + e); }
   try { ensureConsultationFollowupTrigger_(); } catch(e) { Logger.log('Trigger check failed: ' + e); }
   try { ensureAutoCourtPrepTrigger_(); } catch(e) { Logger.log('autoCourtPrep trigger: ' + e); }
-  try { ensureHighlightSyncTriggers_(); } catch(e) { Logger.log('highlightSync trigger: ' + e); }
+  try { removeHighlightSyncTriggers_(); } catch(e) { Logger.log('highlightSync cleanup: ' + e); }
   try {
   var today = new Date();
   var holidayMode = isHolidayMode_();
