@@ -128,7 +128,13 @@ function syncGcalToNotion() {
 
 // ─────────────────────────────────────────
 // 觸發器安裝（每 5 分鐘）
+// installHighlightTriggers：public wrapper，供 clasp run 呼叫
+// ensureHighlightSyncTriggers_：供 sendMorningBriefing() 內部呼叫
 // ─────────────────────────────────────────
+function installHighlightTriggers() {
+  ensureHighlightSyncTriggers_();
+}
+
 function ensureHighlightSyncTriggers_() {
   var triggers = ScriptApp.getProjectTriggers();
   var hasNotion = triggers.some(function(t) { return t.getHandlerFunction() === 'syncNotionToGcal'; });
