@@ -153,3 +153,6 @@ function ensureHighlightSyncTriggers_() {
 function setupHighlightSync() {
   ensureHighlightSyncTriggers_();
 }
+
+// 向下相容：v1.0 觸發器指向此函式名稱，保留 alias 避免 "Script function not found"
+function syncNotionCompletedToHighlight() { syncNotionToGcal(); }
