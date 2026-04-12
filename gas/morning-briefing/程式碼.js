@@ -414,7 +414,7 @@ function buildHighlightCandidates_(courtEvents, deadlineEvents, consultations, a
   return candidates.slice(0, 10);
 }
 
-// ======================== 假日 Highlight 候選產生（v2.31） ========================
+// ======================== 假日 Highlight 候選產生（v2.32） ========================
 
 function buildHolidayHighlightCandidates_(familyEvents) {
   var candidates = [], seen = {};
@@ -429,33 +429,80 @@ function buildHolidayHighlightCandidates_(familyEvents) {
   // 1. 家庭行事曆今日事件（如果有）
   familyEvents.forEach(function(e) { add('👨‍👩‍👧', e.time ? e.time + ' ' + e.title : e.title, e.title); });
 
-  // 2. 生活類固定選項（輪替顯示，用 dayOfYear 做 offset）
-  var allLifeOptions = [
-    { icon: '🥾', label: '大坑步道走走', title: '大坑步道走走' },
-    { icon: '📚', label: '閱讀時間', title: '閱讀時間' },
-    { icon: '🎬', label: '看劇/電影', title: '看劇或電影' },
-    { icon: '🧹', label: '整理家務', title: '整理家務' },
-    { icon: '👨‍👩‍👧', label: '陪荳荳活動', title: '陪荳荳活動' },
-    { icon: '🍳', label: '研究美食/下廚', title: '研究美食或下廚' },
-    { icon: '📦', label: '清空收集箱', title: '清空 TickTick 收集箱' },
-    { icon: '😎', label: '翻 Someday 清單', title: '翻 Someday 清單挑一件推進' },
-    { icon: '💆', label: '純粹放空充電', title: '純粹放空充電' },
-    { icon: '📋', label: '下週預覽', title: '預覽下週行程與重要事項' },
+  // 2. 從 5 個 Notion database 撈未完成真實任務
+  var notionSources = [
+    { dbId: 'bbee22f2-1ca4-8204-8c3a-0762b543100f', icon: '📥' },
+    { dbId: '126e22f2-1ca4-82f4-a239-877c4a809bfa',  icon: '👨‍💼' },
+    { dbId: 'e95e22f2-1ca4-828e-aefa-07cb6adc890a',  icon: '👨‍👩‍👧' },
+    { dbId: '9a2e22f2-1ca4-827e-84a0-877316d747e5',  icon: '♻️' },
+    { dbId: '476e22f2-1ca4-82b3-b768-0787728e380f',  icon: '😎' },
   ];
 
-  var now = new Date();
-  var start = new Date(now.getFullYear(), 0, 0);
-  var dayOfYear = Math.floor((now - start) / 86400000);
-  var offset = dayOfYear % allLifeOptions.length;
+  var today = new Date();
+  var todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  var msPerDay = 86400000;
+  var notionTasks = [];
+  var priorityRankMap = { 'High Priority': 1, 'Medium Priority': 2, 'Low Priority': 3, 'No Priority': 4 };
 
-  var slots = Math.max(1, 5 - candidates.length);
-  for (var i = 0; i < slots && i < allLifeOptions.length; i++) {
-    var opt = allLifeOptions[(offset + i) % allLifeOptions.length];
-    add(opt.icon, opt.label, opt.title);
-  }
+  notionSources.forEach(function(src) {
+    try {
+      var resp = UrlFetchApp.fetch('https://api.notion.com/v1/databases/' + src.dbId + '/query', {
+        method: 'post',
+        headers: { 'Authorization': 'Bearer ' + CONFIG.NOTION_API_KEY, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+        payload: JSON.stringify({ filter: { property: 'Checkbox', checkbox: { equals: false } }, page_size: 50 }),
+        muteHttpExceptions: true,
+      });
+      var data = JSON.parse(resp.getContentText());
+      if (!data.results || (data.status && data.status !== 200)) {
+        Logger.log('假日 Notion [' + src.icon + '] 錯誤：' + resp.getContentText());
+        return;
+      }
+      data.results.forEach(function(page) {
+        var props = page.properties;
+        var titleProp = props['Title'];
+        if (!titleProp || !titleProp.title || !titleProp.title.length) return;
+        var title = titleProp.title.map(function(t) { return t.plain_text; }).join('');
+        if (!title) return;
+
+        var dateProp = props['Date'];
+        var dueDate = null, daysUntilDue = null;
+        if (dateProp && dateProp.date && dateProp.date.start) {
+          dueDate = dateProp.date.start.substring(0, 10);
+          daysUntilDue = Math.ceil((new Date(dueDate).getTime() - todayTime) / msPerDay);
+        }
+
+        var priorityProp = props['Priority Level'];
+        var priority = (priorityProp && priorityProp.select) ? priorityProp.select.name : 'No Priority';
+        var priorityRank = priorityRankMap[priority] || 4;
+        var isOverdue = daysUntilDue !== null && daysUntilDue < 0;
+        var hasDate = dueDate !== null;
+
+        // sortOrder: 逾期=0；其餘 priorityRank*2 + (無日期?1:0)
+        var sortOrder = isOverdue ? 0 : priorityRank * 2 + (hasDate ? 0 : 1);
+
+        notionTasks.push({
+          icon: src.icon, title: title, sortOrder: sortOrder,
+          daysUntilDue: daysUntilDue !== null ? daysUntilDue : 9999, isOverdue: isOverdue
+        });
+      });
+    } catch (e) {
+      Logger.log('假日 Notion [' + src.icon + '] 例外：' + e.message);
+    }
+  });
+
+  // 排序：sortOrder ASC，同 sortOrder 則較早到期優先
+  notionTasks.sort(function(a, b) {
+    return a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.daysUntilDue - b.daysUntilDue;
+  });
+
+  // 填入候選（保留家庭行事曆的 slot）
+  var slotsLeft = Math.max(0, 8 - candidates.length);
+  notionTasks.slice(0, slotsLeft).forEach(function(t) {
+    add(t.icon, t.title, t.title);
+  });
 
   // 週日固定加入下週預覽
-  if (now.getDay() === 0) {
+  if (today.getDay() === 0) {
     add('📋', '下週預覽', '預覽下週行程與重要事項');
   }
 
