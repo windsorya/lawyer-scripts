@@ -1507,6 +1507,44 @@ function diagBriefing() {
   return steps.join(' | ');
 }
 function setupDailyTrigger(){ScriptApp.getProjectTriggers().forEach(function(t){if(t.getHandlerFunction()==='sendMorningBriefing')ScriptApp.deleteTrigger(t);});ScriptApp.newTrigger('sendMorningBriefing').timeBased().atHour(8).everyDays(1).inTimezone('Asia/Taipei').create();Logger.log('✅ 已設定每日 08:00 觸發器');}
+
+/** 更新 LINE webhook URL 到指定 GAS deployment（v2.34 @42） */
+function updateLineWebhookToV234() {
+  var token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+  if (!token) { Logger.log('❌ 找不到 LINE_CHANNEL_ACCESS_TOKEN'); return; }
+  var newUrl = 'https://script.google.com/macros/s/AKfycbwVUaWBKzvcALlvRL_aqqk6rpDykzU5eN3nKdJ0_21MyDRm_7RCYxLgdbwYAsPqIbCaOA/exec';
+  var resp = UrlFetchApp.fetch('https://api.line.me/v2/bot/channel/webhook/endpoint', {
+    method: 'put',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + token },
+    payload: JSON.stringify({ webhookEndpointUrl: newUrl, endpoint: newUrl }),
+    muteHttpExceptions: true
+  });
+  var code = resp.getResponseCode();
+  var body = resp.getContentText();
+  Logger.log('HTTP ' + code + ': ' + body);
+  if (code === 200) {
+    Logger.log('✅ webhook 已更新至 v2.34 (@42)');
+    Logger.log('新 URL: ' + newUrl);
+  } else {
+    Logger.log('❌ 更新失敗，請手動在 LINE Developers console 更新');
+  }
+  return 'HTTP ' + code + ': ' + body;
+}
+
+/** 查詢目前 LINE webhook URL */
+function checkLineWebhookUrl() {
+  var token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+  if (!token) return '❌ 找不到 LINE_CHANNEL_ACCESS_TOKEN';
+  var resp = UrlFetchApp.fetch('https://api.line.me/v2/bot/channel/webhook/endpoint', {
+    method: 'get',
+    headers: { Authorization: 'Bearer ' + token },
+    muteHttpExceptions: true
+  });
+  var result = 'HTTP ' + resp.getResponseCode() + ': ' + resp.getContentText();
+  Logger.log(result);
+  return result;
+}
 /** 強制觸發 calendar 授權（無 try-catch，會彈出授權視窗） */
 function authorizeCalendar() {
   var cals = CalendarApp.getAllCalendars();
@@ -1530,6 +1568,112 @@ function testNotionTodos() {
   var ts=getNotionTodoCandidates_(new Date());
   Logger.log('Notion 待辦候選（'+ts.length+' 項）：');
   ts.forEach(function(t,i){Logger.log((i+1)+'. '+t.icon+' '+t.title+t.suffix);});
+}
+
+// ======================== 自訂 Highlight 測試（v2.34） ========================
+
+/**
+ * 測試一：狀態機 set/get/clear + 超時邏輯
+ * clasp run testCustomHighlightStateMachine
+ */
+function testCustomHighlightStateMachine() {
+  var userId = 'TEST_USER_001';
+  var results = [];
+
+  // 1. 初始狀態應為 false
+  clearPendingCustomHighlight_(userId);
+  var r1 = getPendingCustomHighlight_(userId);
+  results.push('[1] 初始狀態（應=false）: ' + r1 + (r1 === false ? ' ✓' : ' ✗'));
+
+  // 2. set 後應為 true
+  setPendingCustomHighlight_(userId);
+  var r2 = getPendingCustomHighlight_(userId);
+  results.push('[2] set 後（應=true）: ' + r2 + (r2 === true ? ' ✓' : ' ✗'));
+
+  // 3. clear 後應為 false
+  clearPendingCustomHighlight_(userId);
+  var r3 = getPendingCustomHighlight_(userId);
+  results.push('[3] clear 後（應=false）: ' + r3 + (r3 === false ? ' ✓' : ' ✗'));
+
+  // 4. 寫入已過期的 timestamp，應自動失效
+  PropertiesService.getScriptProperties().setProperty(
+    'PENDING_HL_' + userId,
+    JSON.stringify({ ts: Date.now() - 11 * 60 * 1000 })  // 11 分鐘前
+  );
+  var r4 = getPendingCustomHighlight_(userId);
+  results.push('[4] 超時 11min（應=false）: ' + r4 + (r4 === false ? ' ✓' : ' ✗'));
+
+  // 5. 超時後 key 應已被清除
+  var r5 = PropertiesService.getScriptProperties().getProperty('PENDING_HL_' + userId);
+  results.push('[5] 超時後 key 清除（應=null）: ' + r5 + (r5 === null ? ' ✓' : ' ✗'));
+
+  var summary = results.join('\n');
+  Logger.log(summary);
+  return summary;
+}
+
+/**
+ * 測試二：Flex Message 結構驗證（確認按鈕位置和 data 正確）
+ * clasp run testCustomHighlightFlexStructure
+ */
+function testCustomHighlightFlexStructure() {
+  var candidates = [
+    { icon: '⚖️', label: '測試庭期', data: 'hl:測試庭期' },
+    { icon: '⏰', label: '測試期限', data: 'hl:測試期限' }
+  ];
+  var flex = buildHighlightFlexMessage_(false, candidates);
+  var body = flex.contents.body;
+  var contents = body.contents;
+
+  var results = [];
+
+  // 找 hl_custom 按鈕
+  var customBtn = contents.filter(function(c) {
+    return c.type === 'button' && c.action && c.action.data === 'hl_custom';
+  });
+  results.push('[1] hl_custom 按鈕存在（應=1個）: ' + customBtn.length + (customBtn.length === 1 ? ' ✓' : ' ✗'));
+
+  if (customBtn.length > 0) {
+    var btn = customBtn[0];
+    results.push('[2] label（應=✏️ 自訂 Highlight）: ' + btn.action.label + (btn.action.label === '✏️ 自訂 Highlight' ? ' ✓' : ' ✗'));
+    results.push('[3] action.type（應=postback）: ' + btn.action.type + (btn.action.type === 'postback' ? ' ✓' : ' ✗'));
+    results.push('[4] style（應=secondary）: ' + btn.style + (btn.style === 'secondary' ? ' ✓' : ' ✗'));
+  }
+
+  // 確認位置：hl_custom 在「以上都不是」uri 按鈕之前
+  var uriBtn = contents.filter(function(c) { return c.type === 'button' && c.action && c.action.type === 'uri'; });
+  var customIdx = contents.indexOf(customBtn[0]);
+  var uriIdx = contents.indexOf(uriBtn[0]);
+  results.push('[5] 順序：✏️ 在「以上都不是」上方（應=true）: ' + (customIdx < uriIdx) + (customIdx < uriIdx ? ' ✓' : ' ✗'));
+
+  // 總 button 數量
+  var allBtns = contents.filter(function(c) { return c.type === 'button'; });
+  results.push('[6] 總按鈕數（candidates+✏️+以上都不是=4）: ' + allBtns.length + (allBtns.length === 4 ? ' ✓' : ' ✗'));
+
+  var summary = results.join('\n');
+  Logger.log(summary);
+  return summary;
+}
+
+/**
+ * 測試三：推真實 Flex Message 到 LINE，視覺確認按鈕位置
+ * clasp run testCustomHighlightVisual
+ */
+function testCustomHighlightVisual() {
+  var today = new Date();
+  var candidates = buildHighlightCandidates_(
+    getCourtEvents(today, 0),
+    getLawyerDeadlineEvents(today),
+    getConsultationEvents(today),
+    getLawyerDeadlineEvents(today).filter(function(e){ return !e.title.startsWith('⏰'); }),
+    [], getNotionTodoCandidates_(today)
+  );
+  var flex = buildHighlightFlexMessage_(true, candidates);
+  sendLinePush_([
+    { type: 'text', text: '🧪 [測試] v2.34 Highlight 卡片\n請確認「✏️ 自訂 Highlight」按鈕在「以上都不是」上方' },
+    flex
+  ]);
+  return '已推送，共 ' + candidates.length + ' 個候選 + ✏️ 自訂按鈕';
 }
 
 /** 工作待辦 Carousel 測試：推實際卡片到 LINE 確認明天樣式 */
