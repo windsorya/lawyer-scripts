@@ -1,5 +1,5 @@
 // ============================================================
-// 📋 律師晨報推播系統 v2.33
+// 📋 律師晨報推播系統 v2.34
 // 功能：每日 08:00 自動推播今日/明日庭期、辦案期限、諮詢預約、
 //       案件待辦到期、時效預警、家庭行程、身心狀態至 LINE（透過 Messaging API）
 // 作者：Claude for William
@@ -365,6 +365,11 @@ function getTaiwanHolidayCalendar_() {
 }
 
 function isHolidayMode_() {
+  // 測試用強制覆寫：FORCE_WEEKDAY=1 → 工作模式；FORCE_HOLIDAY=1 → 假日模式
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FORCE_WEEKDAY') === '1') return false;
+  if (props.getProperty('FORCE_HOLIDAY') === '1') return true;
+
   var today = new Date();
   var day = today.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) {
@@ -561,6 +566,8 @@ function buildHighlightFlexMessage_(highlightEmpty, candidates) {
   });
 
   bodyContents.push({ type: 'separator', margin: 'lg' });
+  bodyContents.push({ type: 'button', style: 'secondary', height: 'sm', margin: 'md',
+    action: { type: 'postback', label: '✏️ 自訂 Highlight', data: 'hl_custom', displayText: '✏️ 自訂 Highlight' } });
   bodyContents.push({ type: 'button', style: 'link', height: 'sm', margin: 'md', action: { type: 'uri', label: '💡 以上都不是？用 Claude 自訂', uri: claudeUrl }, color: '#78716C' });
 
   return {
@@ -1105,13 +1112,19 @@ function sendLineReply_(rt,mo) {
 function doPost(e) {
   try{if(!e||!e.postData||!e.postData.contents)return ContentService.createTextOutput('OK');
     var body=JSON.parse(e.postData.contents);(body.events||[]).forEach(function(ev){
+      var userId=(ev.source&&ev.source.userId)||'';
       if(ev.type==='postback'&&ev.postback&&ev.postback.data){
         var d=ev.postback.data;
-        if(d.indexOf('hl:')===0) handleHighlightSelection_(ev.replyToken,d.substring(3));
+        if(d==='hl_custom') handleCustomHighlightRequest_(ev.replyToken,userId);
+        else if(d.indexOf('hl:')===0) handleHighlightSelection_(ev.replyToken,d.substring(3));
         else if(d.indexOf('task:')===0) handleTaskAction_(ev.replyToken,d);
       }
-      if(ev.type==='message'&&ev.message&&ev.message.type==='text'&&ev.replyToken) {
-        handleMessageEvent_(ev.replyToken,ev.message.text);
+      if(ev.type==='message'&&ev.message&&ev.message.type==='text'&&ev.replyToken){
+        if(userId&&getPendingCustomHighlight_(userId)){
+          handleCustomHighlightInput_(ev.replyToken,userId,ev.message.text);
+        }else{
+          handleMessageEvent_(ev.replyToken,ev.message.text);
+        }
       }
     });}catch(err){Logger.log('doPost 錯誤：'+err.message);}
   return ContentService.createTextOutput('OK');
@@ -1124,6 +1137,51 @@ function handleHighlightSelection_(rt,title) {
     if(!cal.getEvents(s,e).some(function(ev){return ev.getTitle()===title;}))cal.createAllDayEvent(title,today);ok=true;}
   }catch(err){Logger.log('建立 Highlight 事件錯誤：'+err.message);}
   sendLineReply_(rt,[{type:'text',text:ok?'⭐ 已設定 Highlight：\n'+title+'\n\n可繼續點選其他項目複選 💪':'❌ 設定失敗，請用 Claude 手動設定。'}]);
+}
+
+// ======================== 自訂 Highlight 狀態機（v2.34） ========================
+
+var CUSTOM_HL_TIMEOUT_MS_ = 10 * 60 * 1000; // 10 分鐘
+
+function setPendingCustomHighlight_(userId) {
+  if (!userId) return;
+  PropertiesService.getScriptProperties().setProperty(
+    'PENDING_HL_' + userId, JSON.stringify({ ts: Date.now() })
+  );
+}
+
+function getPendingCustomHighlight_(userId) {
+  if (!userId) return false;
+  var raw = PropertiesService.getScriptProperties().getProperty('PENDING_HL_' + userId);
+  if (!raw) return false;
+  try {
+    var data = JSON.parse(raw);
+    if (Date.now() - data.ts > CUSTOM_HL_TIMEOUT_MS_) {
+      clearPendingCustomHighlight_(userId);
+      return false;
+    }
+    return true;
+  } catch(err) { return false; }
+}
+
+function clearPendingCustomHighlight_(userId) {
+  if (!userId) return;
+  PropertiesService.getScriptProperties().deleteProperty('PENDING_HL_' + userId);
+}
+
+function handleCustomHighlightRequest_(replyToken, userId) {
+  setPendingCustomHighlight_(userId);
+  sendLineReply_(replyToken, [{type:'text', text:'📝 請輸入你要加入 Highlight 的內容：'}]);
+}
+
+function handleCustomHighlightInput_(replyToken, userId, text) {
+  clearPendingCustomHighlight_(userId);
+  var title = (text || '').trim();
+  if (!title) {
+    sendLineReply_(replyToken, [{type:'text', text:'❌ 內容不能為空，請重新點選「✏️ 自訂 Highlight」再輸入'}]);
+    return;
+  }
+  handleHighlightSelection_(replyToken, title);
 }
 
 // ======================== 任務 Flex Carousel（Phase 1） ========================
@@ -1449,6 +1507,11 @@ function diagBriefing() {
   return steps.join(' | ');
 }
 function setupDailyTrigger(){ScriptApp.getProjectTriggers().forEach(function(t){if(t.getHandlerFunction()==='sendMorningBriefing')ScriptApp.deleteTrigger(t);});ScriptApp.newTrigger('sendMorningBriefing').timeBased().atHour(8).everyDays(1).inTimezone('Asia/Taipei').create();Logger.log('✅ 已設定每日 08:00 觸發器');}
+/** 強制觸發 calendar 授權（無 try-catch，會彈出授權視窗） */
+function authorizeCalendar() {
+  var cals = CalendarApp.getAllCalendars();
+  Logger.log('✅ Calendar 授權成功，共 ' + cals.length + ' 個行事曆');
+}
 function removeAllTriggers(){ScriptApp.getProjectTriggers().forEach(function(t){ScriptApp.deleteTrigger(t);});Logger.log('已移除所有觸發器');}
 function testHealthStatus(){var r=getHealthStatus(new Date());Logger.log('display:\n'+r.display);Logger.log('prompt:\n'+r.prompt);}
 function testFamilyEvents(){var t=new Date(),c=getCourtEvents(t,0),l=getLawyerDeadlineEvents(t),f=getFamilyEvents(t,c,l);Logger.log('家庭行程：');if(!f.length)Logger.log('無');else f.forEach(function(e){Logger.log('▸ '+e.time+' '+e.title);});}
@@ -1467,6 +1530,64 @@ function testNotionTodos() {
   var ts=getNotionTodoCandidates_(new Date());
   Logger.log('Notion 待辦候選（'+ts.length+' 項）：');
   ts.forEach(function(t,i){Logger.log((i+1)+'. '+t.icon+' '+t.title+t.suffix);});
+}
+
+/** 工作待辦 Carousel 測試：推實際卡片到 LINE 確認明天樣式 */
+function testWeekdayCarousel() {
+  var today = new Date();
+  var todos = getNotionTodoCandidates_(today);
+  var result = '=== Notion 工作待辦 (' + todos.length + ' 項) ===\n';
+  todos.forEach(function(t, i) { result += (i+1) + '. ' + t.icon + ' ' + t.title + t.suffix + '\n'; });
+
+  if (todos.length === 0) {
+    result += '（目前無符合條件的工作待辦：需逾期、今日到期、High Priority≤7天、或 Medium Priority≤3天）';
+    Logger.log(result);
+    return result;
+  }
+
+  // 用正確的 collectTaskItems_ 建 taskItems
+  var lawyerAll = getLawyerDeadlineEvents(today);
+  var lawyerAdmin = lawyerAll.filter(function(e) {
+    return !isLeaveEvent(e.title) && !e.title.includes('陳律') && !e.title.startsWith('⏰');
+  });
+  var taskItems = collectTaskItems_(todos, lawyerAdmin);
+  var carousel = buildTaskFlexCarousel_(taskItems);
+
+  if (carousel) {
+    sendLinePush_([{type:'text', text:'🧪 [測試] 工作待辦卡片預覽（' + taskItems.length + ' 項）'}, carousel]);
+    result += '→ 已推 LINE，請確認卡片樣式';
+  } else {
+    result += '→ carousel 建立失敗（taskItems=' + taskItems.length + '）';
+  }
+  Logger.log(result);
+  return result;
+}
+
+/** 完整平日晨報測試：強制工作模式，推完整晨報到 LINE */
+function testFullWeekdayBriefing() {
+  var props = PropertiesService.getScriptProperties();
+  try {
+    props.setProperty('FORCE_WEEKDAY', '1');
+    sendMorningBriefing();
+    return '已推完整平日晨報（強制工作模式）';
+  } finally {
+    props.deleteProperty('FORCE_WEEKDAY');
+  }
+}
+
+/** 假日 Highlight 測試（return 值可直接被 clasp run 顯示） */
+function debugHolidayHighlight() {
+  var today = new Date();
+  var familyEvts = getFamilyEvents(today, [], []);
+  var candidates = buildHolidayHighlightCandidates_(familyEvts);
+  var lines = ['=== 假日 Highlight 候選（' + candidates.length + ' 項）==='];
+  candidates.forEach(function(c, i) {
+    lines.push((i + 1) + '. ' + c.icon + ' ' + c.label);
+  });
+  lines.push('（今天=' + ['日','一','二','三','四','五','六'][today.getDay()] + '，家庭行程=' + familyEvts.length + ' 項）');
+  var result = lines.join('\n');
+  Logger.log(result);
+  return result;
 }
 
 // ======================== 問題診斷工具 ========================
