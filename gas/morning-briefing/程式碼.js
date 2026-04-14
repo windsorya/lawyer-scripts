@@ -261,9 +261,23 @@ function sendMorningBriefing() {
   // 任務 Flex Carousel（Phase 1）：Notion 工作待辦 + GCal 行政待辦
   var notionTodos = holidayMode ? [] : getNotionTodoCandidates_(today);
   var taskItems = collectTaskItems_(notionTodos, lawyerAdmin);
+
+  // 系統健康監控 bubble
+  var health = getSystemHealth();
+  var healthBubble = buildHealthFlexMessage(health);
+
+  var healthAddedToCarousel = false;
   if (taskItems.length > 0) {
     var carouselMsg = buildTaskFlexCarousel_(taskItems);
-    if (carouselMsg && lineMessages.length < 4) lineMessages.push(carouselMsg);
+    if (carouselMsg) {
+      carouselMsg.contents.contents.push(healthBubble);
+      healthAddedToCarousel = true;
+      if (lineMessages.length < 4) lineMessages.push(carouselMsg);
+    }
+  }
+  if (!healthAddedToCarousel) {
+    var healthFlex = { type: 'flex', altText: '系統健康', contents: healthBubble };
+    if (lineMessages.length < 4) lineMessages.push(healthFlex);
   }
 
   var hlCandidates;
@@ -277,7 +291,15 @@ function sendMorningBriefing() {
   if (lineMessages.length < 5) lineMessages.push(flexMsg);
 
   sendLinePush_(lineMessages);
+  recordBriefingSuccess();
   Logger.log('晨報推播完成：' + todayStr);
+
+  // 有服務異常時額外推送緊急通知
+  if ([health.ngrok, health.notion, health.anthropic].some(function(v) { return v.includes('🔴'); })) {
+    var alertText = '🚨 系統異常警報\n判決DB：' + health.ngrok + '\nNotion：' + health.notion + '\nLINE Bot：' + health.anthropic;
+    sendLinePush_([{type: 'text', text: alertText}]);
+    Logger.log('系統異常警報已發送');
+  }
   } catch(e) {
     var errTs = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
     sendLinePush_([{type:'text',text:'⚠️ 律師晨報執行失敗\n錯誤：'+e.message+'\n時間：'+errTs}]);
