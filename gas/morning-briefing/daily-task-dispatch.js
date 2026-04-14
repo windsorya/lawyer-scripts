@@ -18,6 +18,7 @@
  * v1.4 - 2026-03-27 律師行事曆+專案管理行事曆排除「陳律」相關人事行程
  *        （如「陳律特休」「陳律請假」等），這些不是陳律師要「完成」的待辦
  * v1.5 - 2026-04-09 陳律特休攔截：偵測到陳律今日請假 → 跳過工作分配，改推友善提示
+ * v1.6 - 2026-04-14 王律過濾：專案管理與律師行事曆排除標題/說明含「王律」的行程
  */
 
 // ======================== 主函數 ========================
@@ -261,6 +262,8 @@ function getDispatchProjectEvents_(start, end) {
       if (color && CONFIG.DONE_COLORS.indexOf(color) !== -1) return;
       // ★ v1.4：排除陳律人事行程
       if (title.indexOf('陳律') !== -1) return;
+      // ★ v1.6：排除王律相關行程
+      if (isWangOnly_(event)) return;
 
       results.push({
         title: title,
@@ -292,6 +295,8 @@ function getDispatchLawyerEvents_(start, end) {
       if (color && CONFIG.DONE_COLORS.indexOf(color) !== -1) return;
       // ★ v1.4：排除陳律人事行程（特休、請假等）
       if (title.indexOf('陳律') !== -1) return;
+      // ★ v1.6：排除王律相關行程
+      if (isWangOnly_(event)) return;
 
       results.push({
         title: title,
@@ -313,6 +318,12 @@ function formatDispatchTime_(event) {
   var h = start.getHours();
   var m = start.getMinutes();
   return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+}
+
+function isWangOnly_(event) {
+  var title = event.getTitle() || '';
+  var desc = event.getDescription() || '';
+  return title.indexOf('王律') !== -1 || desc.indexOf('王律') !== -1;
 }
 
 function shortenDispatchLocation_(location) {
