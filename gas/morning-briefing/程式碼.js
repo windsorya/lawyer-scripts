@@ -170,6 +170,15 @@ function sendMorningBriefing() {
   if (lawyerDeadlines.length > 0) { message += '\n⏰【今日辦案期限】\n'; lawyerDeadlines.forEach(function(e) { message += formatEvent(e); }); }
 
   var notionAlerts = getNotionAlerts(today);
+  // ★ 時效已解除：律師行事曆中被標綠色的 ⏰ 事件 → 從 Notion 時效預警排除
+  var clearedDeadlines = getGreenDeadlineCaseNames_(today);
+  if (clearedDeadlines.length > 0) {
+    notionAlerts.deadlines = notionAlerts.deadlines.filter(function(d) {
+      return !clearedDeadlines.some(function(c) {
+        return d.caseName.indexOf(c) !== -1 || c.indexOf(d.caseName) !== -1;
+      });
+    });
+  }
   if (notionAlerts.todos.length > 0) { message += '\n⏰【案件待辦到期】\n'; notionAlerts.todos.forEach(function(t) { message += '▸ ' + t.caseName + '：' + t.todo + '\n'; }); }
 
   var highlightEvents = sortEvents(getHighlightEvents(today));
@@ -956,6 +965,33 @@ function getNotionAlerts(today) {
 function getNotionTitle(p){if(!p||!p.title||p.title.length===0)return'';return p.title.map(function(t){return t.plain_text;}).join('');}
 function getNotionRichText(p){if(!p||!p.rich_text||p.rich_text.length===0)return'';return p.rich_text.map(function(t){return t.plain_text;}).join('');}
 function getNotionDate(p){if(!p||!p.date||!p.date.start)return null;return p.date.start;}
+
+/**
+ * 掃描律師行事曆中「被標綠色的 ⏰ 期限事件」，回傳案件名稱片段陣列
+ * 用於過濾 Notion 時效預警——標綠色 = 律師已自行解除預警
+ */
+function getGreenDeadlineCaseNames_(today) {
+  try {
+    var cal = CalendarApp.getCalendarById(CONFIG.LAWYER_CALENDAR_ID);
+    if (!cal) return [];
+    var start = new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000);  // 60天前
+    var end   = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);  // 90天後
+    var cleared = [];
+    cal.getEvents(start, end).forEach(function(ev) {
+      var title = ev.getTitle() || '';
+      if (title.indexOf('⏰') === -1) return;                          // 只看 ⏰ 事件
+      var color = ev.getColor();
+      if (!color || CONFIG.DONE_COLORS.indexOf(color) === -1) return;  // 只要綠色
+      // 去掉 ⏰ 及常見後綴，取案件名稱核心
+      var name = title.replace(/^[⏰\s]+/, '').replace(/[時效截止期限到期]+.*$/, '').trim();
+      if (name) cleared.push(name);
+    });
+    return cleared;
+  } catch (err) {
+    Logger.log('讀取已解除時效事件失敗：' + err.message);
+    return [];
+  }
+}
 
 // ======================== Gmail 時效性通知攔截（v2.32） ========================
 
