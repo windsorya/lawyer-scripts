@@ -20,6 +20,7 @@
  * v1.5 - 2026-04-09 陳律特休攔截：偵測到陳律今日請假 → 跳過工作分配，改推友善提示
  * v1.6 - 2026-04-14 王律過濾：專案管理與律師行事曆排除標題含「王律」的行程（僅查標題，不查說明，避免誤殺）
  * v1.7 - 2026-04-14 新增【今日電話諮詢】區塊（呼叫主檔案 getConsultationEvents()）
+ * v1.8 - 2026-04-14 新增【王律今日會議室】區塊（同行事曆，只取標題含王律的事件）
  */
 
 // ======================== 主函數 ========================
@@ -71,6 +72,7 @@ function sendDailyTaskDispatch() {
   var todayProjectEvents = getDispatchProjectEvents_(todayStart, todayEnd);
   var lawyerEventsAll = getDispatchLawyerEvents_(todayStart, weekLater);
   var todayConsultations = getConsultationEvents(today); // ★ v1.7：諮詢行事曆（來自主檔案）
+  var todayMeetingRoom = getDispatchMeetingRoomEvents_(todayStart, todayEnd); // ★ v1.8：同行事曆，只取標題含王律
   // 逾期掃描（過去 30 天到昨天，未完成的事項）
   var overdueProjectEvents = getDispatchProjectEvents_(thirtyDaysAgo, yesterdayEnd);
   var overdueLawyerEvents = getDispatchLawyerEvents_(thirtyDaysAgo, yesterdayEnd);
@@ -80,6 +82,7 @@ function sendDailyTaskDispatch() {
   var todayWork = [];          // 今日專案工作（專案管理大任務）
   var todayTodo = [];          // 今日行政待辦（律師行事曆小任務）
   var consultItems = [];       // 今日電話諮詢（諮詢行事曆）
+  var meetingItems = [];       // 會議室預約（同行事曆，標題含王律）
   var deadlines = [];          // 近期期限（⏰ 開頭，7天內）
   var tomorrowItems = [];      // 明日預告
 
@@ -134,6 +137,11 @@ function sendDailyTaskDispatch() {
     consultItems.push((e.time ? e.time + ' ' : '全天 ') + e.title);
   });
 
+  // 處理會議室預約—王律（★ v1.8）
+  todayMeetingRoom.forEach(function(e) {
+    meetingItems.push((e.time ? e.time + ' ' : '全天 ') + e.title);
+  });
+
   // 期限按天數排序
   deadlines.sort(function(a, b) { return a.sort - b.sort; });
 
@@ -165,6 +173,15 @@ function sendDailyTaskDispatch() {
     msg += '\n\n【今日電話諮詢】';
     consultItems.forEach(function(c) {
       msg += '\n• ' + c;
+    });
+  }
+
+  // 王律今日會議室預約（★ v1.8）
+  if (meetingItems.length > 0) {
+    hasContent = true;
+    msg += '\n\n【王律今日會議室】';
+    meetingItems.forEach(function(m) {
+      msg += '\n• ' + m;
     });
   }
 
@@ -375,4 +392,70 @@ function setupDispatchTrigger() {
 
 function testDailyTaskDispatch() {
   sendDailyTaskDispatch();
+}
+
+/**
+ * 讀取會議室行事曆—只取標題含「王律」的事件（★ v1.8）
+ * 與 getConsultationEvents 使用同一行事曆，邏輯相反
+ */
+function getDispatchMeetingRoomEvents_(start, end) {
+  try {
+    var cal = CalendarApp.getCalendarById(CONFIG.CONSULTATION_CALENDAR_ID);
+    if (!cal) return [];
+    return cal.getEvents(start, end)
+      .filter(function(ev) {
+        return (ev.getTitle() || '').indexOf('王律') !== -1;
+      })
+      .map(function(ev) {
+        var ad = ev.isAllDayEvent();
+        return {
+          time: ad ? '' : Utilities.formatDate(ev.getStartTime(), 'Asia/Taipei', 'HH:mm'),
+          title: ev.getTitle()
+        };
+      })
+      .sort(function(a, b) { return a.time.localeCompare(b.time); });
+  } catch (err) {
+    Logger.log('會議室行事曆讀取失敗：' + err.message);
+    return [];
+  }
+}
+
+// ======================== 診斷函式（查完刪除）========================
+
+function debugDispatchCalendars() {
+  var today = new Date();
+  var todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+  var todayEnd   = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+  var lines = [];
+  lines.push('today=' + Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss'));
+  lines.push('range=' + Utilities.formatDate(todayStart,'Asia/Taipei','MM-dd HH:mm') + ' ~ ' + Utilities.formatDate(todayEnd,'Asia/Taipei','MM-dd HH:mm'));
+
+  var calDefs = [
+    { key: 'PROJECT',      id: CONFIG.PROJECT_MGMT_CALENDAR_ID },
+    { key: 'LAWYER',       id: CONFIG.LAWYER_CALENDAR_ID },
+    { key: 'COURT',        id: CONFIG.COURT_CALENDAR_ID },
+    { key: 'CONSULTATION', id: CONFIG.CONSULTATION_CALENDAR_ID }
+  ];
+
+  calDefs.forEach(function(def) {
+    try {
+      var cal = CalendarApp.getCalendarById(def.id);
+      if (!cal) { lines.push('[' + def.key + '] NOT FOUND'); return; }
+      lines.push('[' + def.key + '] ' + cal.getName());
+      var evts = cal.getEvents(todayStart, todayEnd);
+      lines.push('  raw=' + evts.length);
+      evts.forEach(function(e) {
+        var t = e.getTitle();
+        var d = (e.getDescription() || '').substring(0, 40);
+        var wang = isWangOnly_(e);
+        lines.push('  • [' + (wang?'SKIP':'OK') + '] ' + t + (d?' |desc:'+d:''));
+      });
+    } catch(err) {
+      lines.push('[' + def.key + '] ERR: ' + err.message);
+    }
+  });
+
+  var result = lines.join('\n');
+  Logger.log(result);
+  return result;
 }
