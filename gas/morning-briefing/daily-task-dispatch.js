@@ -164,7 +164,7 @@ function sendDailyTaskDispatch() {
   // 王律今日會議室（★ v1.8）
   if (meetingItems.length > 0) {
     hasContent = true;
-    msg += '\n\n【王律今日會議室】';
+    msg += '\n\n【今日會議室預約】';
     meetingItems.forEach(function(m) {
       msg += '\n• ' + m;
     });
