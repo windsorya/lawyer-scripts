@@ -18,7 +18,8 @@
  * v1.4 - 2026-03-27 律師行事曆+專案管理行事曆排除「陳律」相關人事行程
  *        （如「陳律特休」「陳律請假」等），這些不是陳律師要「完成」的待辦
  * v1.5 - 2026-04-09 陳律特休攔截：偵測到陳律今日請假 → 跳過工作分配，改推友善提示
- * v1.6 - 2026-04-14 王律過濾：專案管理與律師行事曆排除標題/說明含「王律」的行程
+ * v1.6 - 2026-04-14 王律過濾：專案管理與律師行事曆排除標題含「王律」的行程（僅查標題，不查說明，避免誤殺）
+ * v1.7 - 2026-04-14 新增【今日電話諮詢】區塊（呼叫主檔案 getConsultationEvents()）
  */
 
 // ======================== 主函數 ========================
@@ -64,11 +65,12 @@ function sendDailyTaskDispatch() {
     Logger.log('陳律特休偵測失敗（略過）：' + leaveErr.message);
   }
 
-  // ===== 掃描三個行事曆 =====
+  // ===== 掃描四個行事曆 =====
   var todayCourtEvents = getDispatchCourtEvents_(todayStart, todayEnd);
   var tomorrowCourtEvents = getDispatchCourtEvents_(nextBizStart, nextBizEnd);
   var todayProjectEvents = getDispatchProjectEvents_(todayStart, todayEnd);
   var lawyerEventsAll = getDispatchLawyerEvents_(todayStart, weekLater);
+  var todayConsultations = getConsultationEvents(today); // ★ v1.7：諮詢行事曆（來自主檔案）
   // 逾期掃描（過去 30 天到昨天，未完成的事項）
   var overdueProjectEvents = getDispatchProjectEvents_(thirtyDaysAgo, yesterdayEnd);
   var overdueLawyerEvents = getDispatchLawyerEvents_(thirtyDaysAgo, yesterdayEnd);
@@ -77,6 +79,7 @@ function sendDailyTaskDispatch() {
   var todayCourt = [];         // 今日庭期（已排除所有含X律的事件 + 非案件事件）
   var todayWork = [];          // 今日專案工作（專案管理大任務）
   var todayTodo = [];          // 今日行政待辦（律師行事曆小任務）
+  var consultItems = [];       // 今日電話諮詢（諮詢行事曆）
   var deadlines = [];          // 近期期限（⏰ 開頭，7天內）
   var tomorrowItems = [];      // 明日預告
 
@@ -126,6 +129,11 @@ function sendDailyTaskDispatch() {
     todayTodo.push(e.title + ' [尚未完成]');
   });
 
+  // 處理今日電話諮詢（★ v1.7）
+  todayConsultations.forEach(function(e) {
+    consultItems.push((e.time ? e.time + ' ' : '全天 ') + e.title);
+  });
+
   // 期限按天數排序
   deadlines.sort(function(a, b) { return a.sort - b.sort; });
 
@@ -148,6 +156,15 @@ function sendDailyTaskDispatch() {
       var line = '\n• ' + e.timeStr + ' ' + e.title;
       if (e.location) line += '\n  📍 ' + shortenDispatchLocation_(e.location);
       msg += line;
+    });
+  }
+
+  // 今日電話諮詢（★ v1.7）
+  if (consultItems.length > 0) {
+    hasContent = true;
+    msg += '\n\n【今日電話諮詢】';
+    consultItems.forEach(function(c) {
+      msg += '\n• ' + c;
     });
   }
 
@@ -321,9 +338,9 @@ function formatDispatchTime_(event) {
 }
 
 function isWangOnly_(event) {
-  var title = event.getTitle() || '';
-  var desc = event.getDescription() || '';
-  return title.indexOf('王律') !== -1 || desc.indexOf('王律') !== -1;
+  // ★ v1.7：只查標題，不查說明——避免把「王律交辦」「請王律確認」等描述文字的事件誤殺
+  var title = (typeof event.getTitle === 'function') ? event.getTitle() : (event.title || event.summary || '');
+  return title.indexOf('王律') !== -1;
 }
 
 function shortenDispatchLocation_(location) {
