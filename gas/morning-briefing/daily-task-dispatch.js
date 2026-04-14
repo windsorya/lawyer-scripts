@@ -21,6 +21,7 @@
  * v1.6 - 2026-04-14 王律過濾：專案管理與律師行事曆排除標題含「王律」的行程（僅查標題，不查說明，避免誤殺）
  * v1.7 - 2026-04-14 新增【今日電話諮詢】區塊（呼叫主檔案 getConsultationEvents()）
  * v1.8 - 2026-04-14 新增【王律今日會議室】區塊（同行事曆，只取標題含王律的事件）
+ * v1.9 - 2026-04-14 修正：isWangOnly_ 改回同時查標題+說明（僅限三個主行事曆）；電話諮詢改為顯示全部事件
  */
 
 // ======================== 主函數 ========================
@@ -71,7 +72,7 @@ function sendDailyTaskDispatch() {
   var tomorrowCourtEvents = getDispatchCourtEvents_(nextBizStart, nextBizEnd);
   var todayProjectEvents = getDispatchProjectEvents_(todayStart, todayEnd);
   var lawyerEventsAll = getDispatchLawyerEvents_(todayStart, weekLater);
-  var todayConsultations = getConsultationEvents(today); // ★ v1.7：諮詢行事曆（來自主檔案）
+  var todayConsultations = getDispatchAllConsultationEvents_(todayStart, todayEnd); // ★ v1.9：諮詢行事曆全部事件（不做王律過濾）
   var todayMeetingRoom = getDispatchMeetingRoomEvents_(todayStart, todayEnd); // ★ v1.8：同行事曆，只取標題含王律
   // 逾期掃描（過去 30 天到昨天，未完成的事項）
   var overdueProjectEvents = getDispatchProjectEvents_(thirtyDaysAgo, yesterdayEnd);
@@ -355,9 +356,10 @@ function formatDispatchTime_(event) {
 }
 
 function isWangOnly_(event) {
-  // ★ v1.7：只查標題，不查說明——避免把「王律交辦」「請王律確認」等描述文字的事件誤殺
+  // 三個主要行事曆（開庭、律師、專案管理）專用：標題或說明含「王律」即排除
   var title = (typeof event.getTitle === 'function') ? event.getTitle() : (event.title || event.summary || '');
-  return title.indexOf('王律') !== -1;
+  var desc  = (typeof event.getDescription === 'function') ? event.getDescription() : (event.description || '');
+  return title.indexOf('王律') !== -1 || desc.indexOf('王律') !== -1;
 }
 
 function shortenDispatchLocation_(location) {
@@ -395,8 +397,31 @@ function testDailyTaskDispatch() {
 }
 
 /**
+ * 讀取諮詢行事曆全部事件（★ v1.9）
+ * 不做王律過濾，完整顯示所有電話諮詢
+ */
+function getDispatchAllConsultationEvents_(start, end) {
+  try {
+    var cal = CalendarApp.getCalendarById(CONFIG.CONSULTATION_CALENDAR_ID);
+    if (!cal) return [];
+    return cal.getEvents(start, end)
+      .map(function(ev) {
+        var ad = ev.isAllDayEvent();
+        return {
+          time: ad ? '' : Utilities.formatDate(ev.getStartTime(), 'Asia/Taipei', 'HH:mm'),
+          title: ev.getTitle()
+        };
+      })
+      .sort(function(a, b) { return a.time.localeCompare(b.time); });
+  } catch (err) {
+    Logger.log('諮詢行事曆讀取失敗：' + err.message);
+    return [];
+  }
+}
+
+/**
  * 讀取會議室行事曆—只取標題含「王律」的事件（★ v1.8）
- * 與 getConsultationEvents 使用同一行事曆，邏輯相反
+ * 與諮詢行事曆使用同一行事曆
  */
 function getDispatchMeetingRoomEvents_(start, end) {
   try {
