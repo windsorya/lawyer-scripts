@@ -262,6 +262,10 @@ function sendMorningBriefing() {
   var notionTodos = holidayMode ? [] : getNotionTodoCandidates_(today);
   var taskItems = collectTaskItems_(notionTodos, lawyerAdmin);
 
+  // 進行中任務 bubble
+  var activeTasks = getActiveTasks();
+  var activeTasksBubble = buildActiveTasksBubble(activeTasks);
+
   // 系統健康監控 bubble
   var health = getSystemHealth();
   var healthBubble = buildHealthFlexMessage(health);
@@ -270,12 +274,17 @@ function sendMorningBriefing() {
   if (taskItems.length > 0) {
     var carouselMsg = buildTaskFlexCarousel_(taskItems);
     if (carouselMsg) {
+      if (activeTasksBubble) carouselMsg.contents.contents.push(activeTasksBubble);
       carouselMsg.contents.contents.push(healthBubble);
       healthAddedToCarousel = true;
       if (lineMessages.length < 4) lineMessages.push(carouselMsg);
     }
   }
   if (!healthAddedToCarousel) {
+    if (activeTasksBubble) {
+      var activeTasksFlex = { type: 'flex', altText: '📋 進行中任務', contents: activeTasksBubble };
+      if (lineMessages.length < 4) lineMessages.push(activeTasksFlex);
+    }
     var healthFlex = { type: 'flex', altText: '系統健康', contents: healthBubble };
     if (lineMessages.length < 4) lineMessages.push(healthFlex);
   }
