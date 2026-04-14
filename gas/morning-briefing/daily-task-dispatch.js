@@ -21,7 +21,7 @@
  * v1.6 - 2026-04-14 王律過濾：專案管理與律師行事曆排除標題含「王律」的行程（僅查標題，不查說明，避免誤殺）
  * v1.7 - 2026-04-14 新增【今日電話諮詢】區塊（呼叫主檔案 getConsultationEvents()）
  * v1.8 - 2026-04-14 新增【王律今日會議室】區塊（同行事曆，只取標題含王律的事件）
- * v1.9 - 2026-04-14 修正：isWangOnly_ 改回同時查標題+說明（僅限三個主行事曆）；電話諮詢改為顯示全部事件
+ * v1.9 - 2026-04-14 修正：isWangOnly_ 改回同時查標題+說明；移除未經請求的【今日電話諮詢】區塊
  */
 
 // ======================== 主函數 ========================
@@ -67,13 +67,12 @@ function sendDailyTaskDispatch() {
     Logger.log('陳律特休偵測失敗（略過）：' + leaveErr.message);
   }
 
-  // ===== 掃描四個行事曆 =====
+  // ===== 掃描三個主行事曆 + 會議室 =====
   var todayCourtEvents = getDispatchCourtEvents_(todayStart, todayEnd);
   var tomorrowCourtEvents = getDispatchCourtEvents_(nextBizStart, nextBizEnd);
   var todayProjectEvents = getDispatchProjectEvents_(todayStart, todayEnd);
   var lawyerEventsAll = getDispatchLawyerEvents_(todayStart, weekLater);
-  var todayConsultations = getDispatchAllConsultationEvents_(todayStart, todayEnd); // ★ v1.9：諮詢行事曆全部事件（不做王律過濾）
-  var todayMeetingRoom = getDispatchMeetingRoomEvents_(todayStart, todayEnd); // ★ v1.8：同行事曆，只取標題含王律
+  var todayMeetingRoom = getDispatchMeetingRoomEvents_(todayStart, todayEnd); // ★ v1.8：會議室行事曆，只取標題含王律
   // 逾期掃描（過去 30 天到昨天，未完成的事項）
   var overdueProjectEvents = getDispatchProjectEvents_(thirtyDaysAgo, yesterdayEnd);
   var overdueLawyerEvents = getDispatchLawyerEvents_(thirtyDaysAgo, yesterdayEnd);
@@ -82,8 +81,7 @@ function sendDailyTaskDispatch() {
   var todayCourt = [];         // 今日庭期（已排除所有含X律的事件 + 非案件事件）
   var todayWork = [];          // 今日專案工作（專案管理大任務）
   var todayTodo = [];          // 今日行政待辦（律師行事曆小任務）
-  var consultItems = [];       // 今日電話諮詢（諮詢行事曆）
-  var meetingItems = [];       // 會議室預約（同行事曆，標題含王律）
+  var meetingItems = [];       // 王律今日會議室（會議室行事曆，標題含王律）
   var deadlines = [];          // 近期期限（⏰ 開頭，7天內）
   var tomorrowItems = [];      // 明日預告
 
@@ -133,12 +131,7 @@ function sendDailyTaskDispatch() {
     todayTodo.push(e.title + ' [尚未完成]');
   });
 
-  // 處理今日電話諮詢（★ v1.7）
-  todayConsultations.forEach(function(e) {
-    consultItems.push((e.time ? e.time + ' ' : '全天 ') + e.title);
-  });
-
-  // 處理會議室預約—王律（★ v1.8）
+  // 處理王律今日會議室（★ v1.8）
   todayMeetingRoom.forEach(function(e) {
     meetingItems.push((e.time ? e.time + ' ' : '全天 ') + e.title);
   });
@@ -168,16 +161,7 @@ function sendDailyTaskDispatch() {
     });
   }
 
-  // 今日電話諮詢（★ v1.7）
-  if (consultItems.length > 0) {
-    hasContent = true;
-    msg += '\n\n【今日電話諮詢】';
-    consultItems.forEach(function(c) {
-      msg += '\n• ' + c;
-    });
-  }
-
-  // 王律今日會議室預約（★ v1.8）
+  // 王律今日會議室（★ v1.8）
   if (meetingItems.length > 0) {
     hasContent = true;
     msg += '\n\n【王律今日會議室】';
@@ -397,31 +381,7 @@ function testDailyTaskDispatch() {
 }
 
 /**
- * 讀取諮詢行事曆全部事件（★ v1.9）
- * 不做王律過濾，完整顯示所有電話諮詢
- */
-function getDispatchAllConsultationEvents_(start, end) {
-  try {
-    var cal = CalendarApp.getCalendarById(CONFIG.CONSULTATION_CALENDAR_ID);
-    if (!cal) return [];
-    return cal.getEvents(start, end)
-      .map(function(ev) {
-        var ad = ev.isAllDayEvent();
-        return {
-          time: ad ? '' : Utilities.formatDate(ev.getStartTime(), 'Asia/Taipei', 'HH:mm'),
-          title: ev.getTitle()
-        };
-      })
-      .sort(function(a, b) { return a.time.localeCompare(b.time); });
-  } catch (err) {
-    Logger.log('諮詢行事曆讀取失敗：' + err.message);
-    return [];
-  }
-}
-
-/**
  * 讀取會議室行事曆—只取標題含「王律」的事件（★ v1.8）
- * 與諮詢行事曆使用同一行事曆
  */
 function getDispatchMeetingRoomEvents_(start, end) {
   try {
