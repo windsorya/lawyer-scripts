@@ -9,10 +9,11 @@ function getSystemHealth() {
     var res = UrlFetchApp.fetch('https://aceofbase.ngrok.app/sse', {
       method: 'GET',
       muteHttpExceptions: true,
-      followRedirects: false,
-      headers: { 'Accept': 'text/event-stream' }
+      followRedirects: false
     });
-    results.ngrok = (res.getResponseCode() === 200) ? '🟢 正常' : '🔴 斷線(' + res.getResponseCode() + ')';
+    var code = res.getResponseCode();
+    // 200=正常, 406=server在但拒絕非SSE請求(視為正常), 其他=異常
+    results.ngrok = (code === 200 || code === 406) ? '🟢 正常' : '🔴 斷線(' + code + ')';
   } catch(e) {
     results.ngrok = '🔴 無法連線';
   }
