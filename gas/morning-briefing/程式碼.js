@@ -162,7 +162,7 @@ function sendMorningBriefing() {
   else { tomorrowCourt.forEach(function(e) { message += formatEvent(e); if (!e.allDay && e.location) message += '  📍 ' + e.location + '\n'; }); }
 
   var consultations = sortEvents(getConsultationEvents(today));
-  if (consultations.length > 0) { message += '\n💬【今日諮詢預約】\n'; consultations.forEach(function(e) { message += formatEvent(e); }); }
+  if (consultations.length > 0) { message += '\n💬【今日會議室預約】\n'; consultations.forEach(function(e) { message += formatEvent(e); }); }
 
   var lawyerNonLeave = lawyerAll.filter(function(e) { return !isLeaveEvent(e.title) && !e.title.includes('陳律'); });
   var lawyerDeadlines = lawyerNonLeave.filter(function(e) { return e.title.startsWith('⏰'); });
@@ -918,7 +918,7 @@ function getLawyerDeadlineEvents(today) {
 function getConsultationEvents(today) {
   var s=new Date(today);s.setHours(0,0,0,0); var e=new Date(today);e.setHours(23,59,59,999);
   try { var cal=CalendarApp.getCalendarById(CONFIG.CONSULTATION_CALENDAR_ID); if(!cal)return[];
-    return cal.getEvents(s,e).filter(function(ev){return ev.getTitle().includes('王律');})
+    return cal.getEvents(s,e)
       .map(function(ev){var ad=ev.isAllDayEvent();return{allDay:ad,time:ad?'':Utilities.formatDate(ev.getStartTime(),'Asia/Taipei','HH:mm'),title:ev.getTitle()};})
       .sort(function(a,b){return a.time.localeCompare(b.time);});
   } catch(err){Logger.log('讀取諮詢預約行事曆錯誤：'+err.message);return[];}
