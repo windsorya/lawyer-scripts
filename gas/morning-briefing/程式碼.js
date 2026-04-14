@@ -919,6 +919,7 @@ function getConsultationEvents(today) {
   var s=new Date(today);s.setHours(0,0,0,0); var e=new Date(today);e.setHours(23,59,59,999);
   try { var cal=CalendarApp.getCalendarById(CONFIG.CONSULTATION_CALENDAR_ID); if(!cal)return[];
     return cal.getEvents(s,e)
+      .filter(function(ev){ return (ev.getTitle()||'').indexOf('王律') !== -1; })
       .map(function(ev){var ad=ev.isAllDayEvent();return{allDay:ad,time:ad?'':Utilities.formatDate(ev.getStartTime(),'Asia/Taipei','HH:mm'),title:ev.getTitle()};})
       .sort(function(a,b){return a.time.localeCompare(b.time);});
   } catch(err){Logger.log('讀取諮詢預約行事曆錯誤：'+err.message);return[];}
