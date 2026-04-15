@@ -50,11 +50,24 @@ function getSystemHealth() {
     results.anthropic = '🔴 無法連線';
   }
 
-  // 4. 晨報上次成功時間
+  // 4. 網站（lawyerwjv.com）
+  try {
+    var res4 = UrlFetchApp.fetch('https://lawyerwjv.com', {
+      method: 'GET',
+      muteHttpExceptions: true,
+      followRedirects: true
+    });
+    var code4 = res4.getResponseCode();
+    results.website = (code4 === 200) ? '🟢 正常' : '🔴 異常(' + code4 + ')';
+  } catch(e) {
+    results.website = '🔴 無法連線';
+  }
+
+  // 5. 晨報上次成功時間
   var lastSuccess = props.getProperty('LAST_BRIEFING_SUCCESS') || '⚠️ 無記錄';
   results.lastBriefing = lastSuccess;
 
-  // 5. LINE Bot 上次回應時間
+  // 6. LINE Bot 上次回應時間
   var lastLineBot = props.getProperty('LAST_LINEBOT_RESPONSE') || '⚠️ 無記錄';
   results.lineBot = lastLineBot;
 

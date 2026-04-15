@@ -238,6 +238,12 @@ function sendMorningBriefing() {
 
   message += '\n🧘 【身心狀態】\n' + healthResult.display;
   if (healthResult.isFallback) message += '（注：以上為昨日數據，今日數據同步後將補發）\n';
+
+  // 系統健康狀態（文字嵌入主訊息）
+  var health = getSystemHealth();
+  message += '\n🖥 【系統健康】\n';
+  message += '判決DB：' + health.ngrok + ' ｜ Notion：' + health.notion + ' ｜ LINE Bot：' + health.anthropic + ' ｜ 網站：' + health.website + '\n';
+
   message += '\n━━━━━━━━━━━━━━\n';
   message += '💡 今日開庭準備 → https://claude.ai/new?q=今日開庭準備\n';
   message += '💡 領今日身心處方 → https://claude.ai/new?q=' + healthResult.prompt;
@@ -266,27 +272,17 @@ function sendMorningBriefing() {
   var activeTasks = getActiveTasks();
   var activeTasksBubble = buildActiveTasksBubble(activeTasks);
 
-  // 系統健康監控 bubble
-  var health = getSystemHealth();
-  var healthBubble = buildHealthFlexMessage(health);
-
-  var healthAddedToCarousel = false;
   if (taskItems.length > 0) {
     var carouselMsg = buildTaskFlexCarousel_(taskItems);
     if (carouselMsg) {
       if (activeTasksBubble) carouselMsg.contents.contents.push(activeTasksBubble);
-      carouselMsg.contents.contents.push(healthBubble);
-      healthAddedToCarousel = true;
       if (lineMessages.length < 4) lineMessages.push(carouselMsg);
     }
-  }
-  if (!healthAddedToCarousel) {
+  } else {
     if (activeTasksBubble) {
       var activeTasksFlex = { type: 'flex', altText: '📋 進行中任務', contents: activeTasksBubble };
       if (lineMessages.length < 4) lineMessages.push(activeTasksFlex);
     }
-    var healthFlex = { type: 'flex', altText: '系統健康', contents: healthBubble };
-    if (lineMessages.length < 4) lineMessages.push(healthFlex);
   }
 
   var hlCandidates;
@@ -304,8 +300,8 @@ function sendMorningBriefing() {
   Logger.log('晨報推播完成：' + todayStr);
 
   // 有服務異常時額外推送緊急通知
-  if ([health.ngrok, health.notion, health.anthropic].some(function(v) { return v.includes('🔴'); })) {
-    var alertText = '🚨 系統異常警報\n判決DB：' + health.ngrok + '\nNotion：' + health.notion + '\nLINE Bot：' + health.anthropic;
+  if ([health.ngrok, health.notion, health.anthropic, health.website].some(function(v) { return v.includes('🔴'); })) {
+    var alertText = '🚨 系統異常警報\n判決DB：' + health.ngrok + '\nNotion：' + health.notion + '\nLINE Bot：' + health.anthropic + '\n網站：' + health.website;
     sendLinePush_([{type: 'text', text: alertText}]);
     Logger.log('系統異常警報已發送');
   }
