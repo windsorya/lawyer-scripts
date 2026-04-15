@@ -408,73 +408,7 @@ function toTaipeiISO(d) {
 }
 
 // ============================================================
-// ⑩-b 整合測試（跑完看 log 確認三個 ✅）
-// ============================================================
-function testAll() {
-  Logger.log('===== 整合測試開始 =====\n');
-
-  // Test 1: Script Properties
-  const notionKey = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
-  const mapsKey   = PropertiesService.getScriptProperties().getProperty('MAPS_API_KEY');
-  Logger.log(`[1/3] Script Properties`);
-  Logger.log(`  NOTION_API_KEY: ${notionKey ? '✅ 存在' : '❌ 缺少'}`);
-  Logger.log(`  MAPS_API_KEY  : ${mapsKey   ? '✅ 存在' : '❌ 缺少'}`);
-
-  // Test 2: Maps API（事務所 → 臺中地院）
-  Logger.log(`\n[2/3] Maps Directions API`);
-  const testDest = '臺中市西區英才路533號';  // 臺中地院
-  const mins = getTravelTime(CONFIG.OFFICE_ADDRESS, testDest);
-  if (mins !== null) {
-    Logger.log(`  ✅ 事務所 → 臺中地院：${mins} 分鐘`);
-  } else {
-    Logger.log(`  ❌ Maps API 回傳 null，請檢查 MAPS_API_KEY`);
-  }
-
-  // Test 3: Notion API（建立測試待辦，標題含「TEST」方便手動刪除）
-  Logger.log(`\n[3/3] Notion API`);
-  const payload = {
-    parent: { database_id: CONFIG.NOTION_DB_ID },
-    properties: {
-      [CONFIG.NOTION_FIELDS.TITLE]: {
-        title: [{ text: { content: '🧪 TEST 出發提醒系統測試（請手動刪除）' } }],
-      },
-      [CONFIG.NOTION_FIELDS.DATE]: {
-        date: { start: toTaipeiISO(new Date()) },
-      },
-    },
-  };
-  const res = UrlFetchApp.fetch('https://api.notion.com/v1/pages', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${notionKey}`,
-      'Content-Type': 'application/json',
-      'Notion-Version': '2022-06-28',
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
-  const code = res.getResponseCode();
-  if (code === 200) {
-    Logger.log(`  ✅ Notion 建立成功（HTTP 200）`);
-  } else {
-    Logger.log(`  ❌ Notion 回傳 ${code}：${res.getContentText().slice(0, 200)}`);
-  }
-
-  Logger.log('\n===== 測試完畢 =====');
-}
-
-// ============================================================
-// ⑪ 一次性設定：寫入 Script Properties（執行一次後可刪）
-// ============================================================
-function oneTimeSetup() {
-  PropertiesService.getScriptProperties().setProperties({
-    'MAPS_API_KEY': 'MAPS_API_KEY_REMOVED',
-  });
-  Logger.log('✅ MAPS_API_KEY 已寫入 Script Properties');
-}
-
-// ============================================================
-// ⑫ 一次性設定：建立觸發器
+// ⑪ 一次性設定：建立觸發器
 // ============================================================
 function setupTriggers() {
   // 清除舊觸發器
