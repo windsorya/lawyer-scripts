@@ -155,7 +155,7 @@ function scanAndCreateReminders(targetDate) {
       saveProcessedEvents(processed);
       createdCount++;
       Logger.log(`  ✅ Notion 待辦建立成功`);
-      sendLinePush_(event, times);  // LINE 通知
+      sendLinePush_(event, { officeDep, homeDep, reminderTime });  // LINE 通知
     } else {
       Logger.log(`  ❌ Notion 建立失敗`);
     }
