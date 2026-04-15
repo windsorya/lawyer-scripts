@@ -1163,6 +1163,9 @@ function setScriptProperty(key, value) {
   PropertiesService.getScriptProperties().setProperty(key, value);
   return 'Set ' + key + ' (len=' + value.length + ')';
 }
+function getScriptProperty(key) {
+  return PropertiesService.getScriptProperties().getProperty(key) || '(not found)';
+}
 
 
 

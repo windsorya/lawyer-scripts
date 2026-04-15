@@ -155,6 +155,7 @@ function scanAndCreateReminders(targetDate) {
       saveProcessedEvents(processed);
       createdCount++;
       Logger.log(`  ✅ Notion 待辦建立成功`);
+      sendLinePush_(event, times);  // LINE 通知
     } else {
       Logger.log(`  ❌ Notion 建立失敗`);
     }
@@ -326,7 +327,54 @@ function createNotionTask(event, times) {
 }
 
 // ============================================================
-// ⑧ 無地址 / Maps 失敗時的備用通知
+// ⑧ LINE 推播
+// ============================================================
+function sendLinePush_(event, times) {
+  const props   = PropertiesService.getScriptProperties();
+  const token   = props.getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+  const userId  = props.getProperty('LINE_USER_ID');
+  if (!token || !userId) {
+    Logger.log('  ⚠️ LINE_CHANNEL_ACCESS_TOKEN 或 LINE_USER_ID 未設定，跳過推播');
+    return;
+  }
+
+  const { officeDep, homeDep, reminderTime } = times;
+  const courtTime = event.getStartTime();
+
+  const officeStr = officeDep ? formatTime(officeDep) : 'N/A';
+  const homeStr   = homeDep   ? formatTime(homeDep)   : 'N/A';
+
+  const msg = [
+    `⚖️ 開庭出發提醒`,
+    `${event.getTitle()}`,
+    `開庭：${formatDateTime(courtTime)}`,
+    ``,
+    `🏢 從事務所：${officeStr} 出發`,
+    `🏠 從住家：${homeStr} 出發`,
+    `🔔 提醒設為 ${formatTime(reminderTime)}（較早者）`,
+  ].join('\n');
+
+  try {
+    UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      payload: JSON.stringify({
+        to: userId,
+        messages: [{ type: 'text', text: msg }],
+      }),
+      muteHttpExceptions: true,
+    });
+    Logger.log(`  ✅ LINE 推播成功`);
+  } catch (e) {
+    Logger.log(`  ⚠️ LINE 推播失敗：${e.message}`);
+  }
+}
+
+// ============================================================
+// ⑨ 無地址 / Maps 失敗時的備用通知
 // ============================================================
 function notifyNoLocation(title, startTime) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
