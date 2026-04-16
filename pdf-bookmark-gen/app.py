@@ -1,6 +1,10 @@
 """
-app.py — 卷證書籤產生器 Standalone Web UI
+app.py — 卷證書籤產生器 Standalone Web UI  v3
 啟動：streamlit run app.py --server.port 8502
+
+v3 新增：
+- ⚙️ 字典設定 expander：YAML 字典 CRUD，切換字典，建立新字典
+- ✨ Gemini Enrich：自動補充被告姓名、日期、案號
 """
 
 import io
@@ -10,10 +14,54 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+import yaml
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
-from bookmark_engine import generate_bookmarks
+from bookmark_engine import scan_pdf, write_pdf_with_bookmarks, load_dictionary
+from gemini_enrich import enrich_bookmarks
+
+# ──────────────────────────────────────────────────────────────
+# 常數
+# ──────────────────────────────────────────────────────────────
+DICT_DIR = Path(__file__).parent / 'dictionaries'
+DICT_DIR.mkdir(exist_ok=True)
+
+
+def _get_dict_files() -> list[str]:
+    return sorted(p.name for p in DICT_DIR.glob('*.yaml'))
+
+
+def _load_dict_as_df(yaml_path: Path):
+    """讀 YAML，轉成 [{標準名稱, 同義詞}] list for dataframe 顯示。"""
+    try:
+        with open(yaml_path, encoding='utf-8') as f:
+            raw = yaml.safe_load(f) or {}
+        rows = []
+        for canonical, synonyms in raw.items():
+            if canonical.startswith('#'):
+                continue
+            syns = '、'.join(synonyms) if synonyms else ''
+            rows.append({'標準名稱': canonical, '同義詞': syns})
+        return rows
+    except Exception:
+        return []
+
+
+def _save_dict(yaml_path: Path, data: dict) -> None:
+    """把 {canonical: [synonyms]} dict 寫回 YAML。"""
+    with open(yaml_path, 'w', encoding='utf-8') as f:
+        yaml.dump(data, f, allow_unicode=True, default_flow_style=False,
+                  sort_keys=False)
+
+
+def _read_raw_dict(yaml_path: Path) -> dict:
+    try:
+        with open(yaml_path, encoding='utf-8') as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
 
 # ──────────────────────────────────────────────────────────────
 # 頁面設定
@@ -102,7 +150,7 @@ with st.sidebar:
             卷證書籤產生器
         </div>
         <div style="color: rgba(255,255,255,0.5); font-size: 12px; margin-top: 4px;">
-            v2 · PyMuPDF 規則引擎
+            v3 · YAML 字典 + Gemini Enrich
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -157,17 +205,17 @@ with st.sidebar:
 # ──────────────────────────────────────────────────────────────
 st.markdown("""
 <div style="background:linear-gradient(135deg,#1B2A4A 0%,#243560 100%);
-            border-radius:16px;padding:24px 28px;margin-bottom:24px;">
+            border-radius:16px;padding:24px 28px;margin-bottom:20px;">
     <div style="display:flex;align-items:flex-start;gap:16px;">
         <div style="font-size:2.2rem;line-height:1;flex-shrink:0;">📑</div>
         <div>
-            <h1 style="color:white;margin:0 0 6px;font-size:1.5rem;font-weight:700;
-                       letter-spacing:-0.03em;line-height:1.2;">
+            <div style="color:white;margin:0 0 6px;font-size:1.5rem;font-weight:700;
+                        letter-spacing:-0.03em;line-height:1.2;">
                 卷證書籤產生器
-            </h1>
+            </div>
             <p style="color:rgba(255,255,255,0.72);margin:0;font-size:13.5px;line-height:1.7;">
                 自動掃描 OCR 後的電子卷證，辨識文件結構並寫入 PDF 書籤目錄。
-                支援批次處理，適用司法院閱卷系統電子卷證。
+                v3 支援 YAML 字典同義詞比對與 Gemini Enrich 自動補充個案資訊。
             </p>
         </div>
     </div>
@@ -182,15 +230,125 @@ st.markdown("""
         </span>
         <span style="background:rgba(201,169,110,0.2);border:1px solid rgba(201,169,110,0.38);
                      color:#D4B87E;border-radius:20px;padding:3px 11px;font-size:12px;">
-            鑑定報告・扣押文件
-        </span>
-        <span style="background:rgba(201,169,110,0.2);border:1px solid rgba(201,169,110,0.38);
-                     color:#D4B87E;border-radius:20px;padding:3px 11px;font-size:12px;">
-            附件・附錄・附表（L2）
+            YAML 字典・Gemini Enrich
         </span>
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+
+# ──────────────────────────────────────────────────────────────
+# ⚙️ 字典設定 Expander
+# ──────────────────────────────────────────────────────────────
+with st.expander('⚙️ 字典設定（同義詞管理）', expanded=False):
+    dict_files = _get_dict_files()
+
+    col_sel, col_new = st.columns([3, 2])
+    with col_sel:
+        if dict_files:
+            selected_dict_name = st.selectbox(
+                '選擇字典',
+                options=['（不使用字典）'] + dict_files,
+                key='selected_dict_name',
+            )
+        else:
+            st.info('尚無字典檔案，請先建立一個。')
+            selected_dict_name = '（不使用字典）'
+            st.session_state['selected_dict_name'] = selected_dict_name
+
+    with col_new:
+        new_dict_input = st.text_input('新字典名稱（不含 .yaml）', key='new_dict_name_input',
+                                       placeholder='例：行政訴訟')
+        if st.button('建立空字典', key='btn_create_dict'):
+            if new_dict_input.strip():
+                new_path = DICT_DIR / f'{new_dict_input.strip()}.yaml'
+                if new_path.exists():
+                    st.warning(f'「{new_dict_input.strip()}.yaml」已存在')
+                else:
+                    _save_dict(new_path, {})
+                    st.success(f'已建立 {new_path.name}')
+                    st.rerun()
+            else:
+                st.warning('請輸入字典名稱')
+
+    # 若已選某字典，顯示內容 + CRUD
+    active_dict_name = st.session_state.get('selected_dict_name', '（不使用字典）')
+    if active_dict_name != '（不使用字典）' and active_dict_name in dict_files:
+        active_path = DICT_DIR / active_dict_name
+        st.markdown(f'**目前字典：** `{active_dict_name}`')
+
+        rows = _load_dict_as_df(active_path)
+        if rows:
+            st.dataframe(rows, use_container_width=True, hide_index=True)
+        else:
+            st.info('字典目前是空的。')
+
+        st.markdown('---')
+        col_add1, col_add2, col_add3 = st.columns([2, 3, 1])
+        with col_add1:
+            new_canonical = st.text_input('標準名稱', key='new_canonical',
+                                          placeholder='例：訊問筆錄')
+        with col_add2:
+            new_synonyms = st.text_input('同義詞（逗號分隔）', key='new_synonyms',
+                                         placeholder='例：詢問筆錄, 偵訊筆錄')
+        with col_add3:
+            st.markdown('<div style="margin-top:28px;"></div>', unsafe_allow_html=True)
+            if st.button('新增', key='btn_add_entry', type='primary'):
+                if new_canonical.strip():
+                    raw_dict = _read_raw_dict(active_path)
+                    syns = [s.strip() for s in new_synonyms.split(',') if s.strip()] \
+                           if new_synonyms.strip() else None
+                    raw_dict[new_canonical.strip()] = syns
+                    _save_dict(active_path, raw_dict)
+                    st.success(f'已新增「{new_canonical.strip()}」')
+                    st.rerun()
+                else:
+                    st.warning('請輸入標準名稱')
+
+        # 刪除條目
+        raw_dict_cur = _read_raw_dict(active_path)
+        canonical_list = [k for k in raw_dict_cur if not k.startswith('#')]
+        if canonical_list:
+            to_delete = st.multiselect('選擇要刪除的條目', canonical_list,
+                                       key='delete_entries')
+            if st.button('刪除選取', key='btn_delete_entries',
+                         disabled=not to_delete):
+                for key in to_delete:
+                    raw_dict_cur.pop(key, None)
+                _save_dict(active_path, raw_dict_cur)
+                st.success(f'已刪除 {len(to_delete)} 個條目')
+                st.rerun()
+
+
+# ──────────────────────────────────────────────────────────────
+# ✨ 處理選項
+# ──────────────────────────────────────────────────────────────
+st.markdown("""
+<div style="background:white;border:1px solid rgba(0,0,0,0.08);border-radius:12px;
+            padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+    <div style="font-weight:700;color:#1D1D1F;font-size:14px;margin-bottom:10px;">
+        📋 處理選項
+    </div>
+""", unsafe_allow_html=True)
+
+opt_col1, opt_col2 = st.columns([1, 1])
+with opt_col1:
+    enable_enrich = st.checkbox(
+        '✨ 啟用 Gemini Enrich（自動補充被告姓名、日期、案號）',
+        key='enable_enrich',
+        value=False,
+    )
+with opt_col2:
+    if enable_enrich:
+        case_hint = st.text_input(
+            '案件提示（可選）',
+            key='case_hint',
+            placeholder='例：被告王志文 114年偵字第5678號',
+        )
+    else:
+        case_hint = ''
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -262,13 +420,27 @@ if not uploaded_files:
 n_files = len(uploaded_files)
 total_mb = sum(f.size for f in uploaded_files) / 1024 / 1024
 
+# 決定是否使用字典
+active_dict_name_now = st.session_state.get('selected_dict_name', '（不使用字典）')
+dict_path_to_use: str | None = None
+if active_dict_name_now != '（不使用字典）' and (DICT_DIR / active_dict_name_now).exists():
+    dict_path_to_use = str(DICT_DIR / active_dict_name_now)
+
+dict_badge = f'字典：{active_dict_name_now}' if dict_path_to_use else '內建規則'
+enrich_badge = 'Gemini Enrich：開' if enable_enrich else 'Gemini Enrich：關'
+
 st.markdown(f"""
 <div style="background:rgba(27,42,74,0.05);border:1px solid rgba(27,42,74,0.12);
             border-radius:10px;padding:12px 18px;margin-bottom:16px;
-            display:flex;align-items:center;gap:12px;">
+            display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
     <span style="font-size:20px;">📋</span>
     <span style="color:#1B2A4A;font-weight:600;font-size:14px;">已選擇 {n_files} 個 PDF</span>
     <span style="color:#8E8E93;font-size:13px;">合計 {total_mb:.1f} MB</span>
+    <span style="background:#EEF1F8;color:#1B2A4A;border-radius:6px;padding:2px 9px;
+                 font-size:12px;">{dict_badge}</span>
+    <span style="background:{'rgba(201,169,110,0.18)' if enable_enrich else '#F2F2F7'};
+                 color:{'#8B6914' if enable_enrich else '#636366'};
+                 border-radius:6px;padding:2px 9px;font-size:12px;">{enrich_badge}</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -284,29 +456,50 @@ if st.button('🚀 開始產生書籤', type='primary', use_container_width=True
     for idx, uploaded_file in enumerate(uploaded_files):
         progress.progress(
             idx / len(uploaded_files),
-            text=f'處理中 {idx+1}/{len(uploaded_files)}：{uploaded_file.name}'
+            text=f'掃描中 {idx+1}/{len(uploaded_files)}：{uploaded_file.name}'
         )
 
+        # 暫存輸入
         tmp_in = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
         tmp_in.write(uploaded_file.read())
         tmp_in.flush(); tmp_in.close()
         tmp_files.append(tmp_in.name)
 
+        # 暫存輸出
         tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
         tmp_out.close()
         tmp_files.append(tmp_out.name)
 
         try:
-            result = generate_bookmarks(tmp_in.name, tmp_out.name)
+            # Step 1: 掃描
+            scan_result = scan_pdf(
+                tmp_in.name,
+                dict_path=dict_path_to_use,
+                collect_page_texts=enable_enrich,
+            )
+            bookmarks = scan_result['bookmarks']
+            page_texts = scan_result.get('page_texts') or {}
+
+            # Step 2: Gemini Enrich（可選）
+            if enable_enrich and bookmarks:
+                progress.progress(
+                    (idx + 0.5) / len(uploaded_files),
+                    text=f'Gemini Enrich {idx+1}/{len(uploaded_files)}：{uploaded_file.name}'
+                )
+                bookmarks = enrich_bookmarks(bookmarks, page_texts, case_hint)
+
+            # Step 3: 寫入 PDF
+            write_pdf_with_bookmarks(tmp_in.name, bookmarks, tmp_out.name)
             with open(tmp_out.name, 'rb') as f:
                 output_bytes = f.read()
+
             results.append({
                 'name': uploaded_file.name,
                 'output_name': Path(uploaded_file.name).stem + '_bookmarked.pdf',
                 'output_bytes': output_bytes,
-                'total_pages': result['total_pages'],
-                'bookmarks': result['bookmarks'],
-                'warnings': result['warnings'],
+                'total_pages': scan_result['total_pages'],
+                'bookmarks': bookmarks,
+                'warnings': scan_result['warnings'],
                 'error': None,
             })
         except Exception as e:
@@ -332,7 +525,6 @@ if st.button('🚀 開始產生書籤', type='primary', use_container_width=True
     success_results = [r for r in results if r['error'] is None]
     fail_results = [r for r in results if r['error'] is not None]
 
-    # 整體摘要
     total_bm = sum(len(r['bookmarks']) for r in success_results)
     st.markdown(f"""
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
@@ -389,7 +581,6 @@ if st.button('🚀 開始產生書籤', type='primary', use_container_width=True
         n_l1 = sum(1 for b in bms if b['level'] == 1)
         n_l2 = n_bm - n_l1
 
-        # 結果卡片
         st.markdown(f"""
         <div style="background:white;border:1px solid rgba(0,0,0,0.08);border-radius:14px;
                     padding:16px 18px;margin:12px 0 4px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
