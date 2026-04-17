@@ -302,6 +302,16 @@ def detect_config(pdf_path):
     return detected_start, detected_mode, total_pages
 
 
+def remove_cjk_spaces(text):
+    """移除 CJK 字符之間的多餘空格（pdfplumber 逐字定位副作用）"""
+    CJK = r'[\u4e00-\u9fff\u3400-\u4dbf\uff01-\uff60\u3000-\u303f]'
+    prev = None
+    while prev != text:
+        prev = text
+        text = re.sub(rf'({CJK}) ({CJK})', r'\1\2', text)
+    return text
+
+
 def extract_and_inject(pdf_path, court_start, mode, volume_name):
     """從 PDF 逐頁萃取文字，插入 [REF:] 標記。"""
     result_lines = []
@@ -314,7 +324,10 @@ def extract_and_inject(pdf_path, court_start, mode, volume_name):
 
         for i, page in enumerate(pdf.pages):
             pdf_page = i + 1
-            text = page.extract_text()
+            # x_tolerance=7, y_tolerance=5：合併鄰近字元，減少字間距碎片
+            text = page.extract_text(x_tolerance=7, y_tolerance=5)
+            if text:
+                text = remove_cjk_spaces(text)
 
             if not text or not text.strip():
                 continue
