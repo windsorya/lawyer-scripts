@@ -57,7 +57,7 @@ body = {
   'areas': [
     {'bounds':{'x':0,   'y':0,   'width':833,'height':843},'action':{'type':'uri','uri':f'https://liff.line.me/{LIFF_ID}?type=checkin', 'label':'上班打卡'}},
     {'bounds':{'x':833, 'y':0,   'width':834,'height':843},'action':{'type':'uri','uri':f'https://liff.line.me/{LIFF_ID}?type=checkout','label':'下班打卡'}},
-    {'bounds':{'x':1667,'y':0,   'width':833,'height':843},'action':{'type':'uri','uri':f'https://liff.line.me/{LIFF_ID}?type=field',   'label':'外勤打卡'}},
+    {'bounds':{'x':1667,'y':0,   'width':833,'height':843},'action':{'type':'uri','uri':f'https://liff.line.me/{LIFF_ID}?type=field',   'label':'外點下班'}},
     {'bounds':{'x':0,   'y':843, 'width':833,'height':843},'action':{'type':'message','text':'請假',    'label':'請假'}},
     {'bounds':{'x':833, 'y':843, 'width':834,'height':843},'action':{'type':'message','text':'假別查詢','label':'假別查詢'}},
     {'bounds':{'x':1667,'y':843, 'width':833,'height':843},'action':{'type':'message','text':'補打卡',  'label':'補打卡'}},
