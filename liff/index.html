@@ -7,37 +7,59 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   body{margin:0;display:flex;align-items:center;justify-content:center;
-       height:100vh;font-family:-apple-system,sans-serif;font-size:20px;
+       height:100vh;font-family:-apple-system,sans-serif;font-size:18px;
        text-align:center;background:#f7f3ee;}
   #wrap{padding:24px;line-height:2.2;}
   .icon{font-size:56px;margin-bottom:16px;}
   #st{color:#444;}
+  #err{color:#c00;font-size:13px;margin-top:12px;word-break:break-all;text-align:left;}
 </style>
 </head>
 <body>
-<div id="wrap"><div class="icon">📍</div><div id="st">初始化中…</div></div>
+<div id="wrap"><div class="icon">📍</div><div id="st">初始化中…</div><div id="err"></div></div>
 <script>
 (async function(){
-  const el = document.getElementById('st');
+  const el  = document.getElementById('st');
+  const err = document.getElementById('err');
+
+  // Step 1: liff.init
+  try {
+    const params0 = new URLSearchParams(window.location.search);
+    const LIFF_ID = '2009829573-INMBsweY';
+    await liff.init({ liffId: LIFF_ID });
+  } catch(e) {
+    el.textContent = '⚠️ LIFF 初始化失敗';
+    err.textContent = '[init] ' + (e.code || '') + ': ' + e.message;
+    return;
+  }
+
+  // Step 2: read type AFTER init (liff rewrites URL)
   const params = new URLSearchParams(window.location.search);
   const type = params.get('type') || 'checkin';
-  const LIFF_ID = '2009829573-INMBsweY';
-  try {
-    await liff.init({ liffId: LIFF_ID });
-    el.textContent = '取得位置中…';
-    navigator.geolocation.getCurrentPosition(async pos => {
-      const lat = pos.coords.latitude.toFixed(6);
-      const lng  = pos.coords.longitude.toFixed(6);
-      el.textContent = '打卡中…';
-      await liff.sendMessages([{type:'text', text:'__LIFF__'+type+'__'+lat+'__'+lng}]);
-      el.textContent = '✅ 完成！';
-      setTimeout(() => liff.closeWindow(), 1200);
-    }, () => {
+
+  el.textContent = '取得位置中…';
+
+  // Step 3: GPS
+  navigator.geolocation.getCurrentPosition(
+    async pos => {
+      try {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        el.textContent = '打卡中…';
+        await liff.sendMessages([{ type: 'text', text: '__LIFF__' + type + '__' + lat + '__' + lng }]);
+        el.textContent = '✅ 完成！';
+        setTimeout(() => liff.closeWindow(), 1200);
+      } catch(e) {
+        el.textContent = '⚠️ 傳送失敗';
+        err.textContent = '[sendMessages] ' + (e.code || '') + ': ' + e.message;
+      }
+    },
+    gpsErr => {
       el.textContent = '⚠️ 請允許位置存取後重試';
-    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
-  } catch(e) {
-    el.textContent = '⚠️ 初始化失敗：' + e.message;
-  }
+      err.textContent = '[GPS] code=' + gpsErr.code + ': ' + gpsErr.message;
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
 })();
 </script>
 </body>
