@@ -13,3 +13,4 @@ gas/morning-briefing/creds.json
 *.pem
 *token*.json
 .env
+gas/worklog/code.gs

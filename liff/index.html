@@ -21,38 +21,67 @@
 (async function(){
   const el  = document.getElementById('st');
   const err = document.getElementById('err');
+  const GAS = 'https://script.google.com/macros/s/AKfycbxh0kpw8u3eXj5pM__nvQypfx9nws1XGR1iDA6s0G3Nq1zQ_dFj5lICvB5JWDVM5vlt/exec';
 
   // Step 1: liff.init
   try {
-    const params0 = new URLSearchParams(window.location.search);
-    const LIFF_ID = '2009829573-INMBsweY';
-    await liff.init({ liffId: LIFF_ID });
+    await liff.init({ liffId: '2009829573-INMBsweY' });
   } catch(e) {
     el.textContent = '⚠️ LIFF 初始化失敗';
     err.textContent = '[init] ' + (e.code || '') + ': ' + e.message;
     return;
   }
 
-  // Step 2: read type AFTER init (liff rewrites URL)
+  // Step 2: read type after init (liff decodes liff.state)
   const params = new URLSearchParams(window.location.search);
-  const type = params.get('type') || 'checkin';
+  const type   = params.get('type') || 'checkin';
+  const token  = liff.getAccessToken();
 
   el.textContent = '取得位置中…';
 
   // Step 3: GPS
   navigator.geolocation.getCurrentPosition(
-    async pos => {
-      try {
-        const lat = pos.coords.latitude.toFixed(6);
-        const lng = pos.coords.longitude.toFixed(6);
-        el.textContent = '打卡中…';
-        await liff.sendMessages([{ type: 'text', text: '__LIFF__' + type + '__' + lat + '__' + lng }]);
-        el.textContent = '✅ 完成！';
-        setTimeout(() => liff.closeWindow(), 1200);
-      } catch(e) {
-        el.textContent = '⚠️ 傳送失敗';
-        err.textContent = '[sendMessages] ' + (e.code || '') + ': ' + e.message;
-      }
+    pos => {
+      const lat = pos.coords.latitude.toFixed(6);
+      const lng = pos.coords.longitude.toFixed(6);
+      el.textContent = '打卡中…';
+
+      // Step 4: JSONP → GAS（不用 liff.sendMessages()，繞過 chat_message 授權問題）
+      const cbName = '__liff' + Date.now();
+      let timer;
+
+      window[cbName] = function(result) {
+        clearTimeout(timer);
+        delete window[cbName];
+        const s = document.getElementById('liff_sc');
+        if (s) s.parentNode.removeChild(s);
+        if (result.ok) {
+          el.textContent = '✅ ' + (result.msg || '完成！');
+          setTimeout(() => liff.closeWindow(), 1200);
+        } else {
+          el.textContent = '⚠️ ' + (result.msg || '打卡失敗');
+          err.textContent = result.err || '';
+        }
+      };
+
+      const sc = document.createElement('script');
+      sc.id  = 'liff_sc';
+      sc.src = GAS + '?action=liff_checkin&type=' + encodeURIComponent(type)
+             + '&lat=' + lat + '&lng=' + lng
+             + '&token=' + encodeURIComponent(token)
+             + '&callback=' + cbName;
+      sc.onerror = () => {
+        clearTimeout(timer);
+        el.textContent = '⚠️ 網路錯誤，請重試';
+        err.textContent = 'JSONP script load failed';
+      };
+
+      timer = setTimeout(() => {
+        el.textContent = '⚠️ 逾時，請重試';
+        err.textContent = 'JSONP timeout (15s)';
+      }, 15000);
+
+      document.head.appendChild(sc);
     },
     gpsErr => {
       el.textContent = '⚠️ 請允許位置存取後重試';
