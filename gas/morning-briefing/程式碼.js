@@ -96,10 +96,61 @@ function truncateLabel_(text, maxLen) {
 // ======================== 主程式 ========================
 
 /**
+ * 判斷觸發器的 handler 是否為孤兒（指向當前 script 已不存在的函式）。
+ * V8 runtime：頂層 function 宣告會成為 globalThis 的 own property。
+ * 必須用 hasOwnProperty 排除 Object.prototype 繼承（如 toString/valueOf）。
+ * 任何判斷失敗時保守回傳 false（不刪），避免誤殺正常觸發器。
+ */
+function isOrphanTrigger_(handlerName) {
+  try {
+    if (!handlerName) return true;
+    if (!Object.prototype.hasOwnProperty.call(globalThis, handlerName)) return true;
+    return typeof globalThis[handlerName] !== 'function';
+  } catch (e) {
+    Logger.log('⚠️ isOrphanTrigger_ 判斷 ' + handlerName + ' 失敗，保守保留：' + e.message);
+    return false;
+  }
+}
+
+/**
+ * 清理孤兒觸發器（handler 指向已刪除的函式）。
+ * 防止 notionHighlightSync 那種「函式已刪但觸發器還活著」的殭屍持續啃配額。
+ * 每次 sendMorningBriefing 執行時自動呼叫一次。
+ */
+function cleanupOrphanTriggers_() {
+  var triggers;
+  try { triggers = ScriptApp.getProjectTriggers(); } catch (e) {
+    Logger.log('⚠️ cleanupOrphanTriggers_ 取得觸發器失敗：' + e.message);
+    return [];
+  }
+  var killed = [];
+  triggers.forEach(function(t) {
+    var fn = '';
+    try { fn = t.getHandlerFunction(); } catch (e) { return; }
+    if (isOrphanTrigger_(fn)) {
+      try {
+        var uid = t.getUniqueId();
+        ScriptApp.deleteTrigger(t);
+        killed.push(fn + ' (' + uid + ')');
+      } catch (e) {
+        Logger.log('⚠️ 刪除孤兒觸發器失敗 ' + fn + '：' + e.message);
+      }
+    }
+  });
+  if (killed.length > 0) {
+    Logger.log('🧹 已清理 ' + killed.length + ' 個孤兒觸發器：' + killed.join('、'));
+  }
+  return killed;
+}
+
+/**
  * 確保晨報觸發器存在。每次 sendMorningBriefing 執行時先呼叫。
  * 如果觸發器被意外刪除，自動重建（每日 08:00 Asia/Taipei）。
+ * 同時掃一遍孤兒觸發器（指向已刪函式者）避免配額被啃光。
  */
 function ensureMorningBriefingTrigger_() {
+  try { cleanupOrphanTriggers_(); } catch(e) { Logger.log('⚠️ 孤兒觸發器清理失敗：' + e.message); }
+
   var triggers = ScriptApp.getProjectTriggers();
   var morningTriggers = triggers.filter(function(t) {
     return t.getHandlerFunction() === 'sendMorningBriefing' &&
