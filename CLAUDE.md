@@ -1,3 +1,57 @@
+## 0. 全自動作業準則（最高優先級，覆蓋後續章節）
+
+律師時間 = 健康、家庭、生活。燒律師時間不可接受。
+
+### 0-1 不打斷律師
+- 遇模糊需求 → 先合理假設 + 在報告「我的假設」區列出，讓律師事後 review
+- 遇設定分叉 → 依最合理預設執行，標註「我的假設」
+- **唯一可以停下來問的情況**：需律師輸入密碼 / OAuth / Apple ID、物理硬體操作、法律責任需律師本人承擔。除此之外全自動。
+
+### 0-2 自動備份 + rollback
+- 改任何檔案前：`cp <file> <file>.bak.$(date +%Y%m%d-%H%M)`
+- 任一子任務失敗 → 自動 rollback 該子任務 .bak，其他子任務成果保留
+- 一個子任務失敗不整體停下。繼續跑其他。
+
+### 0-3 自動驗收
+- 每個可驗證任務產 `verify_<task>.sh`
+- 禁止「應該可以了」「看起來對」「理論上」等憑感覺認定
+- 唯一合法交付開頭：「已實際執行並驗證通過，證據如下」
+- npm run build / pytest / syntax check 全綠才算過
+- API 任務 → curl 實測 + 貼 stdout
+- UI 任務 → 留可執行 verify 步驟或產截圖
+
+### 0-4 交付三件套（缺一不可）
+每個 CC 會話結束必產：
+1. `<project>/CC_REPORT.md` — 子任務狀態表 + 證據 + 假設 + rollback 記錄
+2. `<project>/verify_all.sh` — 律師實機一鍵驗證
+3. `~/run_verify_<task>.command`（chmod +x）— Finder 雙擊檔
+
+律師總動作 = 貼 prompt + 雙擊 .command + 看 CC_REPORT。無其他。
+
+### 0-5 失敗上限
+- 修 3 次仍未過 → 停該子任務 → rollback → 繼續其他
+- CC_REPORT 明列「已完成 N / 已 rollback M / 卡住 K」
+
+### 0-6 Commit 紀律
+- 每子任務獨立 commit，不合併
+- 格式：`<type>(<scope>): <title> [<backlog-id>]`
+- 例：`feat(stats): 首頁筆數動態 count + 1h cache [P1-1]`
+
+### 0-7 禁止詞彙（出現即未通過驗收）
+「應該可以了」「我想沒問題」「理論上會正常」
+「看起來對」「照理說」「預期會成功」
+
+### 0-8 TCC / 律師親手做的白名單（只限以下，其他全自動）
+- 後端啟動 `bash start_web.sh`（TCC 限制要讀 /Volumes）
+- OAuth / Apple ID / 密碼輸入
+- 實體硬體操作
+- Finder 雙擊 .command
+- 跨機授權（iCloud / 1Password 一次性）
+
+這些列在 CC_REPORT「律師動作」區，清楚告知，其他 CC 全包。
+
+---
+
 ## 任務路由提醒
 如果律師直接在終端機問你一個需要 Skills 方法論的任務（如撰寫書狀、案件策略分析、開庭準備、LINE 諮詢回覆等），請提醒律師：「這個任務需要 claude.ai 的 Skills 方法論，建議到 claude.ai 執行會更完整。」
 CC 擅長的是：程式碼開發、GAS 修改、腳本執行、檔案批次處理、git 操作等純技術任務。
