@@ -13,6 +13,8 @@ var PHR_PREFIX = 'PHR_';
 var PHR_ACK_PREFIX = 'PHR_ACK_';
 var PHR_KEYWORD = '開庭';
 var PHR_OFFSETS_MIN = [15, 45, 75, 105];
+// 事件標題含下列任一關鍵字則不建 debrief 提醒（例如陳律師自行開的庭）
+var PHR_EXCLUDE_KEYWORDS = ['陳律'];
 
 // ========== 晨報 hook ==========
 
@@ -28,7 +30,16 @@ function setupPostHearingReminders() {
   var events = cal.getEvents(todayStart, todayEnd);
 
   var hearings = events.filter(function(ev) {
-    return ev.getTitle().indexOf(PHR_KEYWORD) !== -1;
+    var title = ev.getTitle();
+    if (title.indexOf(PHR_KEYWORD) === -1) return false;
+    // 排除陳律等不需王律師回報的庭
+    for (var i = 0; i < PHR_EXCLUDE_KEYWORDS.length; i++) {
+      if (title.indexOf(PHR_EXCLUDE_KEYWORDS[i]) !== -1) {
+        console.log('[PHR] 跳過（含排除關鍵字「' + PHR_EXCLUDE_KEYWORDS[i] + '」）: ' + title);
+        return false;
+      }
+    }
+    return true;
   });
 
   if (hearings.length === 0) {
@@ -100,6 +111,16 @@ function firePostHearingReminder(e) {
     }
 
     var data = JSON.parse(raw);
+
+    // 排除關鍵字防護（處理修改 PHR_EXCLUDE_KEYWORDS 後殘留的舊 trigger）
+    for (var i = 0; i < PHR_EXCLUDE_KEYWORDS.length; i++) {
+      if (data.title && data.title.indexOf(PHR_EXCLUDE_KEYWORDS[i]) !== -1) {
+        console.log('[PHR] 跳過推播（含排除關鍵字「' + PHR_EXCLUDE_KEYWORDS[i] + '」）: ' + data.title);
+        props.deleteProperty(propKey);
+        deleteTriggerByUid_(triggerUid);
+        return;
+      }
+    }
 
     // 檢查是否已 ack
     if (props.getProperty(PHR_ACK_PREFIX + data.key)) {
