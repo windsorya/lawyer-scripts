@@ -40,6 +40,9 @@ const CONFIG = {
   },
 
   PROCESSED_PROP_KEY: 'courtDeparture_processed',
+
+  // 事件標題含下列任一關鍵字則不建出發提醒（例如陳律師自行開的庭）
+  EXCLUDE_KEYWORDS: ['陳律'],
 };
 
 // ============================================================
@@ -94,6 +97,13 @@ function scanAndCreateReminders(targetDate) {
     Logger.log(`\n─── ${title} ───`);
     Logger.log(`  時間：${formatDateTime(startTime)}`);
     Logger.log(`  地址：${location || '（無）'}`);
+
+    // 排除陳律等不需出發提醒的庭
+    const hitExclude = (CONFIG.EXCLUDE_KEYWORDS || []).find(kw => title.indexOf(kw) !== -1);
+    if (hitExclude) {
+      Logger.log(`  ⏭️ 跳過（含排除關鍵字「${hitExclude}」）`);
+      return;
+    }
 
     if (processed[eventId]) {
       Logger.log(`  ⏭️ 已建立過，跳過`);
